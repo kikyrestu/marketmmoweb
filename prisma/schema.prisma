@@ -1,0 +1,248 @@
+// This is your Prisma schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SELLER
+  USER
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  hashedPassword String
+  role           UserRole @default(USER)
+  username       String?  @unique
+  bio            String?
+  location       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Verification fields
+  isVerified         Boolean             @default(false)
+  verificationStatus VerificationStatus?
+  verificationDate   DateTime?
+
+  // Seller specific
+  items           Item[]        @relation("SellerItems")
+  soldItems       Transaction[] @relation("SellerTransactions")
+  receivedReviews Review[]      @relation("SellerReviews")
+
+  // Seller verification
+  sellerVerification SellerVerification?
+
+  // Buyer specific
+  boughtItems  Transaction[] @relation("BuyerTransactions")
+  givenReviews Review[]      @relation("BuyerReviews")
+
+  // Chat related
+  sentMessages            Message[]                 @relation("SentMessages")
+  receivedMessages        Message[]                 @relation("ReceivedMessages")
+  ConversationParticipant ConversationParticipant[]
+  ChatMessage             ChatMessage[]
+}
+
+model Item {
+  id          String  @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  imageUrl    String?
+  isAvailable Boolean @default(true)
+
+  // Relations
+  sellerId   String
+  seller     User     @relation("SellerItems", fields: [sellerId], references: [id])
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  // Transactions and Reviews
+  transactions Transaction[]
+  reviews      Review[]
+
+  // Ratings summary
+  totalRating Int   @default(0)
+  numReviews  Int   @default(0)
+  avgRating   Float @default(0)
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  Conversation Conversation[]
+
+  @@index([sellerId])
+  @@index([categoryId])
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  items       Item[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Transaction {
+  id String @id @default(cuid())
+
+  // Item details
+  itemId   String
+  item     Item   @relation(fields: [itemId], references: [id])
+  quantity Int
+
+  // User details
+  buyerId  String
+  buyer    User   @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  sellerId String
+  seller   User   @relation("SellerTransactions", fields: [sellerId], references: [id])
+
+  // Transaction details
+  status     TransactionStatus @default(PENDING)
+  totalPrice Float
+
+  // Review
+  review Review?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([itemId])
+  @@index([buyerId])
+  @@index([sellerId])
+}
+
+model Review {
+  id      String @id @default(cuid())
+  rating  Int    @db.SmallInt // 1-5 stars
+  comment String @db.Text
+
+  // Relations
+  transactionId String      @unique
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  itemId        String
+  item          Item        @relation(fields: [itemId], references: [id])
+  buyerId       String
+  buyer         User        @relation("BuyerReviews", fields: [buyerId], references: [id])
+  sellerId      String
+  seller        User        @relation("SellerReviews", fields: [sellerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([itemId])
+  @@index([buyerId])
+  @@index([sellerId])
+}
+
+// New conversation-based chat models (keep legacy Message for backward compatibility)
+model Conversation {
+  id            String                    @id @default(cuid())
+  itemId        String
+  item          Item                      @relation(fields: [itemId], references: [id])
+  participants  ConversationParticipant[]
+  messages      ChatMessage[]
+  lastMessageAt DateTime                  @default(now())
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@index([itemId])
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  id                String       @id @default(cuid())
+  conversationId    String
+  conversation      Conversation @relation(fields: [conversationId], references: [id])
+  userId            String
+  user              User         @relation(fields: [userId], references: [id])
+  lastReadMessageId String?
+  lastReadAt        DateTime?
+  createdAt         DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id])
+  body           String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model Message {
+  id      String  @id @default(cuid())
+  content String
+  isRead  Boolean @default(false)
+
+  // User relations
+  senderId   String
+  sender     User   @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId String
+  receiver   User   @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model SellerVerification {
+  id        String             @id @default(cuid())
+  status    VerificationStatus @default(PENDING)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  // Personal Info
+  fullName    String
+  birthDate   DateTime
+  address     String
+  phoneNumber String
+
+  // Bank Info  
+  bankName    String
+  bankAccount String
+  bankHolder  String
+
+  // Documents
+  ktpUrl       String
+  selfieUrl    String
+  bankProofUrl String
+
+  // Relations
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("seller_verifications")
+}
