@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSession, signOut } from "next-auth/react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -48,6 +49,7 @@ interface Transaction {
 
 export function BuyerDashboardNew() {
   const router = useRouter()
+  const { update } = useSession()
   
   // Define all hooks at the top level
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -144,15 +146,19 @@ export function BuyerDashboardNew() {
       // Step 2: Show success message
       toast.success("Successfully upgraded to seller mode! Redirecting...")
       
-  // IMPORTANT: We must invalidate the existing session token so middleware sees the new role.
-  // For JWT strategy, easiest is to sign the user out so they re-authenticate and get a fresh token.
-  // We redirect to signout endpoint with a callback to the signin page, which itself has a callback to seller dashboard.
-  // Double encoding to preserve nested callback.
-  const callbackAfterSignIn = encodeURIComponent('/dashboard/seller')
-  const signInUrl = `/auth/signin?callbackUrl=${callbackAfterSignIn}`
-  const finalUrl = `/api/auth/signout?callbackUrl=${encodeURIComponent(signInUrl)}`
-  console.log("Forcing sign out to refresh session, redirecting to:", finalUrl)
-  window.location.href = finalUrl
+      // Attempt 1: Use next-auth session update (persists new JWT cookie) then go directly.
+      try {
+        console.log("Attempting session.update() to refresh JWT role...")
+        await update()
+        console.log("Session updated. Navigating to seller dashboard.")
+        window.location.href = "/dashboard/seller"
+        return
+      } catch (e) {
+        console.warn("Session update failed, falling back to forced signOut", e)
+      }
+      
+      // Fallback: force signOut so user re-authenticates with new role
+      signOut({ callbackUrl: "/auth/signin?callbackUrl=/dashboard/seller" })
     } catch (error) {
       console.error("Error upgrading to seller:", error)
       toast.error("Failed to upgrade to seller mode")
