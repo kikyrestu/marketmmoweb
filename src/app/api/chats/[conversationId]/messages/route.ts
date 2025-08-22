@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { chatHub } from '@/lib/chatHub'
+import { notificationHub } from '@/lib/notificationHub'
 
 // params.conversationId represents conversation id
 export async function GET(_req: Request, context: any) {
@@ -89,6 +90,11 @@ export async function POST(req: Request, context: any) {
         type: 'message.new',
         conversationId: params.conversationId,
         message: { id: message.id, body: message.body, createdAt: message.createdAt.toISOString(), senderId: message.senderId }
+      }))
+      notificationHub.broadcastToUsers(ids.filter((id: string) => id !== message.senderId), () => ({
+        type: 'chat.message',
+        conversationId: params.conversationId,
+        message: { id: message.id, body: message.body, senderId: message.senderId }
       }))
     } catch (err) { console.error('Broadcast error', err) }
 
