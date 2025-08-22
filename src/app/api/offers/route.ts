@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { notificationHub } from '@/lib/notificationHub'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +42,14 @@ export async function POST(req: NextRequest) {
         status: 'SENT'
       }
     })
+    try {
+      const ids = convo.participants.map((p: any) => p.userId).filter((id: string) => id !== userId)
+      notificationHub.broadcastToUsers(ids, () => ({
+        type: 'offer.new',
+        conversationId,
+        offer: { id: created.id, amount: created.amount, createdById: created.createdById }
+      }))
+    } catch (err) { console.error('Offer notification error', err) }
     return NextResponse.json(created, { status: 201 })
   } catch (e) {
     console.error('[OFFER_POST]', e)

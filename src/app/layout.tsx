@@ -6,6 +6,7 @@ import { Footer } from "@/components/layout/footer"
 import { AuthProvider } from "@/components/providers/auth-provider"
 import { ToastProvider } from "@/components/toaster"
 import { ChatRealtimeProvider } from "@/components/chat-realtime-provider"
+import { NotificationProvider } from "@/components/notification-provider"
 
 const geist = Geist({
   subsets: ["latin"],
@@ -26,12 +27,14 @@ export default function RootLayout({
       <body className={geist.className}>
         <AuthProvider>
           <ChatRealtimeProvider>
-            <div className="relative flex min-h-screen flex-col">
-              <Navbar />
-              <main className="flex-1">{children}</main>
-              <Footer />
-            </div>
-            <ToastProvider />
+            <NotificationProvider>
+              <div className="relative flex min-h-screen flex-col">
+                <Navbar />
+                <main className="flex-1">{children}</main>
+                <Footer />
+              </div>
+              <ToastProvider />
+            </NotificationProvider>
           </ChatRealtimeProvider>
         </AuthProvider>
       </body>
