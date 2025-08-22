@@ -19,6 +19,7 @@ export default function SignInPage() {
   const router = useRouter()
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [otpRequired, setOtpRequired] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -28,15 +29,27 @@ export default function SignInPage() {
     const formData = new FormData(e.currentTarget)
     const email = formData.get("email") as string
     const password = formData.get("password") as string
+    const otp = formData.get("otp") as string
 
     try {
       const res = await signIn("credentials", {
         email,
         password,
+        otp,
         redirect: false,
       })
 
       if (res?.error) {
+        if (res.error === "OTP_REQUIRED") {
+          setOtpRequired(true)
+          setError("One-time password required")
+          return
+        }
+        if (res.error === "INVALID_OTP") {
+          setOtpRequired(true)
+          setError("Invalid one-time password")
+          return
+        }
         setError("Invalid email or password")
         return
       }
@@ -81,6 +94,18 @@ export default function SignInPage() {
                 required
               />
             </div>
+            {otpRequired && (
+              <div className="space-y-2">
+                <Label htmlFor="otp">One-Time Password</Label>
+                <Input
+                  id="otp"
+                  name="otp"
+                  type="text"
+                  placeholder="123456"
+                  required
+                />
+              </div>
+            )}
             {error && (
               <div className="text-sm text-red-500">
                 {error}

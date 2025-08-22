@@ -23,7 +23,13 @@ export async function middleware(request: NextRequest) {
         console.log("No token found, redirecting to signin");
         return NextResponse.redirect(new URL("/auth/signin", request.url));
       }
-      
+
+      // Require OTP verification if enabled
+      if (token.twoFactorEnabled && !token.twoFactorVerified) {
+        console.log("2FA not verified, redirecting to signin");
+        return NextResponse.redirect(new URL("/auth/signin", request.url));
+      }
+
       // Check if user has SELLER role
       if (token.role !== "SELLER") {
         console.log("User is not a seller, redirecting to dashboard");
