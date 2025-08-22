@@ -178,14 +178,11 @@ export function AddItemForm() {
               }}
             />
             {fileError && <p className="text-sm text-destructive">{fileError}</p>}
-            {preview && (
+      {preview && (
               <div className="mt-2">
                 <p className="text-xs text-muted-foreground mb-1">Preview:</p>
-                <img
-                  src={preview}
-                  alt="Preview"
-                  className="h-32 w-32 object-cover rounded border"
-                />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={preview} alt="Preview" className="h-32 w-32 object-cover rounded border" />
               </div>
             )}
             <p className="text-xs text-muted-foreground">Max 2MB. JPG / PNG / WebP.</p>

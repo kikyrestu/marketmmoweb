@@ -1,0 +1,72 @@
+// Update User model untuk seller verification
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  hashedPassword String
+  role           UserRole  @default(BUYER)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Seller verification fields
+  sellerVerification SellerVerification?
+
+  // Seller specific
+  items          Item[]    @relation("SellerItems")
+  soldItems      Transaction[] @relation("SellerTransactions")
+  receivedReviews Review[] @relation("SellerReviews")
+
+  // Buyer specific
+  boughtItems    Transaction[] @relation("BuyerTransactions")
+  givenReviews   Review[] @relation("BuyerReviews")
+  
+  // Chat related
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+}
+
+// New model untuk seller verification
+model SellerVerification {
+  id            String    @id @default(cuid())
+  
+  // Personal Information
+  fullName      String
+  address       String
+  phoneNumber   String
+  birthDate     DateTime
+  
+  // Bank Information
+  bankName      String
+  bankAccount   String
+  bankHolder    String
+  
+  // Document URLs
+  ktpUrl        String    // KTP image
+  selfieUrl     String    // Selfie with verification paper
+  bankProofUrl  String    // Bank account proof
+  
+  // Verification Status
+  status        VerificationStatus @default(PENDING)
+  notes         String?   // Admin notes for rejection
+  submittedAt   DateTime  @default(now())
+  verifiedAt    DateTime?
+  
+  // Relation to User
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id])
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { chatHub } from '@/lib/chatHub'
 
-export async function POST(req: Request, { params }: { params: { conversationId: string } }) {
+// params.conversationId read marker
+export async function POST(req: Request, context: any) {
   try {
+  const params = context?.params as { conversationId: string }
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
     const user = await prisma.user.findUnique({ where: { email: session.user.email } })
@@ -21,6 +24,12 @@ export async function POST(req: Request, { params }: { params: { conversationId:
       where: { id: participant.id },
       data: { lastReadMessageId: lastMessageId || null, lastReadAt: new Date() }
     })
+
+    chatHub.broadcastToUsers([user.id], () => ({
+      type: 'read.update',
+      conversationId: params.conversationId,
+      unreadCount: 0
+    }))
 
     return NextResponse.json({ success: true })
   } catch (e) {

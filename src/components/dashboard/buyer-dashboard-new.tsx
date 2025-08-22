@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useSession, signOut } from "next-auth/react"
+import Image from 'next/image'
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -71,6 +72,7 @@ export function BuyerDashboardNew() {
     totalItems: 0,
     pendingTransactions: 0
   })
+  const [loyalty, setLoyalty] = useState<{ points: number; tier: string }>({ points: 0, tier: 'BRONZE' })
 
   // Fetch user info
   useEffect(() => {
@@ -89,6 +91,19 @@ export function BuyerDashboardNew() {
       }
     }
     fetchUserInfo()
+  }, [])
+
+  // Loyalty
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const res = await fetch('/api/loyalty/summary')
+        if (!res.ok) return
+        const data = await res.json()
+        setLoyalty({ points: data.points ?? 0, tier: data.tier ?? 'BRONZE' })
+      } catch {}
+    }
+    run()
   }, [])
 
   // Data fetching effect
@@ -256,7 +271,7 @@ export function BuyerDashboardNew() {
         </DialogContent>
       </Dialog>
 
-      {/* Statistics Cards */}
+  {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <Card>
           <CardHeader>
@@ -282,6 +297,16 @@ export function BuyerDashboardNew() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{stats.pendingTransactions}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Loyalty</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{loyalty.points.toLocaleString()} pts</div>
+            <div className="text-sm text-muted-foreground">Tier: {loyalty.tier}</div>
           </CardContent>
         </Card>
       </div>
@@ -314,11 +339,9 @@ export function BuyerDashboardNew() {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         {transaction.item.imageUrl && (
-                          <img
-                            src={transaction.item.imageUrl}
-                            alt={transaction.item.name}
-                            className="w-10 h-10 object-cover rounded"
-                          />
+                          <div className="relative w-10 h-10">
+                            <Image src={transaction.item.imageUrl} alt={transaction.item.name} fill sizes="40px" className="object-cover rounded" unoptimized />
+                          </div>
                         )}
                         {transaction.item.name}
                       </div>

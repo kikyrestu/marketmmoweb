@@ -1,3 +1,67 @@
+// Escrow system
+enum EscrowStatus {
+  INIT
+  FUNDS_HELD
+  RELEASED
+  REFUNDED
+  DISPUTE
+  RESOLVED
+}
+
+model EscrowCase {
+  id            String         @id @default(cuid())
+  conversationId String
+  conversation   Conversation  @relation("ConversationEscrows", fields: [conversationId], references: [id])
+  itemId        String
+  item          Item           @relation("ItemEscrows", fields: [itemId], references: [id])
+  buyerId       String
+  buyer         User           @relation("EscrowBuyer", fields: [buyerId], references: [id])
+  sellerId      String
+  seller        User           @relation("EscrowSeller", fields: [sellerId], references: [id])
+  adminId       String?
+  admin         User?          @relation("EscrowAdmin", fields: [adminId], references: [id])
+  status        EscrowStatus   @default(INIT)
+  fee           Int            @default(0)
+  totalAmount   Int            @default(0)
+  participants  EscrowParticipant[]
+  auditLogs     EscrowAuditLog[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([conversationId])
+  @@index([itemId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([adminId])
+  @@index([status])
+}
+
+model EscrowParticipant {
+  id         String      @id @default(cuid())
+  escrowId   String
+  escrow     EscrowCase  @relation(fields: [escrowId], references: [id])
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  role       String      // BUYER, SELLER, ADMIN
+  joinedAt   DateTime    @default(now())
+
+  @@unique([escrowId, userId])
+  @@index([userId])
+}
+
+model EscrowAuditLog {
+  id         String      @id @default(cuid())
+  escrowId   String
+  escrow     EscrowCase  @relation(fields: [escrowId], references: [id])
+  action     String
+  meta       Json?
+  createdById String
+  createdBy  User        @relation(fields: [createdById], references: [id])
+  createdAt  DateTime    @default(now())
+
+  @@index([escrowId])
+  @@index([createdById])
+}
 // This is your Prisma schema
 
 generator client {
@@ -27,6 +91,26 @@ enum VerificationStatus {
   PENDING
   VERIFIED
   REJECTED
+}
+
+// Loyalty program
+enum LoyaltyTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+// Dynamic item field system enums
+enum FieldScope {
+  GLOBAL
+  // GAME // reserved for future multi-game support
+}
+
+enum FieldType {
+  TEXT
+  NUMBER
+  SELECT
 }
 
 model User {
@@ -63,6 +147,29 @@ model User {
   receivedMessages        Message[]                 @relation("ReceivedMessages")
   ConversationParticipant ConversationParticipant[]
   ChatMessage             ChatMessage[]
+  CommunityMessage        CommunityMessage[]
+  communityRoomsCreated   CommunityRoom[]        @relation("RoomsCreated")
+  communityRoomMemberships CommunityRoomMember[]
+
+  // Blog
+  blogPosts BlogPost[]
+  escrowCasesAsBuyer  EscrowCase[] @relation("EscrowBuyer")
+  escrowCasesAsSeller EscrowCase[] @relation("EscrowSeller")
+  escrowCasesAsAdmin  EscrowCase[] @relation("EscrowAdmin")
+  escrowAuditLogs     EscrowAuditLog[]
+  escrowParticipants  EscrowParticipant[]
+  offersBought  Offer[] @relation("OfferBuyer")
+  offersSold    Offer[] @relation("OfferSeller")
+  offersCreated Offer[] @relation("OfferCreatedBy")
+
+  // Loyalty
+  loyaltyLedgers LoyaltyLedger[]
+  loyaltySummary LoyaltySummary?
+
+  // RBAC
+  roleAssignments UserRoleAssignment[]
+  // Listings in tradable rooms
+  roomListings RoomListing[]
 }
 
 model Item {
@@ -82,6 +189,9 @@ model Item {
   // Transactions and Reviews
   transactions Transaction[]
   reviews      Review[]
+  offers       Offer[]
+  escrows      EscrowCase[]               @relation("ItemEscrows")
+  roomListings RoomListing[]
 
   // Ratings summary
   totalRating Int   @default(0)
@@ -91,9 +201,50 @@ model Item {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   Conversation Conversation[]
+  fieldValues ItemFieldValue[]
 
   @@index([sellerId])
   @@index([categoryId])
+}
+
+// Definition of dynamic fields configurable via admin panel
+model ItemFieldDefinition {
+  id          String      @id @default(cuid())
+  scope       FieldScope
+  gameId      String?     // reserved for future use (multi-game)
+  key         String
+  label       String
+  type        FieldType
+  required    Boolean     @default(false)
+  order       Int         @default(0)
+  options     Json?       // for SELECT: array of string
+  constraints Json?       // { min, max, regex }
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  values      ItemFieldValue[]
+
+  @@unique([scope, gameId, key])
+  @@index([scope, isActive])
+}
+
+// Concrete value per item per definition
+model ItemFieldValue {
+  id                String              @id @default(cuid())
+  itemId            String
+  fieldDefinitionId String
+  valueText         String?
+  valueNumber       Int?
+  valueDecimal      Decimal?
+  valueBoolean      Boolean?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  definition        ItemFieldDefinition @relation(fields: [fieldDefinitionId], references: [id])
+  item              Item               @relation(fields: [itemId], references: [id])
+
+  @@unique([itemId, fieldDefinitionId])
+  @@index([fieldDefinitionId])
+  @@index([itemId])
 }
 
 model Category {
@@ -164,6 +315,8 @@ model Conversation {
   item          Item                      @relation(fields: [itemId], references: [id])
   participants  ConversationParticipant[]
   messages      ChatMessage[]
+  offers        Offer[]
+  escrows       EscrowCase[]             @relation("ConversationEscrows")
   lastMessageAt DateTime                  @default(now())
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
@@ -198,6 +351,121 @@ model ChatMessage {
 
   @@index([conversationId, createdAt])
   @@index([senderId])
+}
+
+// Public community chat (global room)
+model CommunityMessage {
+  id        String   @id @default(cuid())
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  body      String   @db.Text
+  replyToId String?  
+  replyTo   CommunityMessage? @relation("CommunityMessageReplies", fields: [replyToId], references: [id])
+  replies   CommunityMessage[] @relation("CommunityMessageReplies")
+  imageUrl  String?
+  // New: optional room context (null = global room)
+  roomId    String?
+  room      CommunityRoom? @relation(fields: [roomId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([senderId])
+  @@index([replyToId])
+  @@index([roomId])
+}
+
+// Community chat rooms (admin created)
+model CommunityRoom {
+  id           String                @id @default(cuid())
+  name         String
+  slug         String                @unique
+  imageUrl     String?
+  tags         String[]              @default([])
+  wordFilter   String[]              @default([])
+  gameName     String?
+  // Whether trading is allowed in this room
+  isTradable   Boolean               @default(false)
+  status       RoomStatus            @default(PUBLISHED)
+  createdById  String
+  createdBy    User                  @relation("RoomsCreated", fields: [createdById], references: [id])
+  members      CommunityRoomMember[]
+  messages     CommunityMessage[]
+  listings     RoomListing[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([slug])
+  @@index([createdById])
+}
+
+enum RoomStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// Blog system
+enum BlogStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model BlogPost {
+  id            String      @id @default(cuid())
+  title         String
+  slug          String      @unique
+  excerpt       String?
+  content       String      @db.Text
+  coverImageUrl String?
+  tags          String[]    @default([])
+  status        BlogStatus  @default(DRAFT)
+  authorId      String
+  author        User        @relation(fields: [authorId], references: [id])
+  publishedAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([slug])
+  @@index([authorId])
+}
+
+// Listings inside tradable community rooms
+enum RoomListingStatus {
+  ACTIVE
+  ARCHIVED
+  SOLD
+}
+
+model RoomListing {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      CommunityRoom @relation(fields: [roomId], references: [id])
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id])
+  sellerId  String
+  seller    User     @relation(fields: [sellerId], references: [id])
+  status    RoomListingStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+
+  @@index([roomId])
+  @@index([sellerId])
+  @@index([status])
+}
+
+// Membership of users in a community room
+model CommunityRoomMember {
+  id       String        @id @default(cuid())
+  roomId   String
+  userId   String
+  role     String?       // future: MOD, MEMBER
+  room     CommunityRoom @relation(fields: [roomId], references: [id])
+  user     User          @relation(fields: [userId], references: [id])
+  joinedAt DateTime      @default(now())
+
+  @@unique([roomId, userId])
+  @@index([userId])
 }
 
 model Message {
@@ -245,4 +513,78 @@ model SellerVerification {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("seller_verifications")
+}
+
+// Negotiation offers between buyer and seller in a conversation
+enum OfferStatus {
+  SENT
+  COUNTER
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+model Offer {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  itemId         String
+  item           Item         @relation(fields: [itemId], references: [id])
+  buyerId        String
+  buyer          User         @relation("OfferBuyer", fields: [buyerId], references: [id])
+  sellerId       String
+  seller         User         @relation("OfferSeller", fields: [sellerId], references: [id])
+  createdById    String
+  createdBy      User         @relation("OfferCreatedBy", fields: [createdById], references: [id])
+  amount         Int          // in smallest currency unit or plain integer (IDR)
+  status         OfferStatus  @default(SENT)
+  note           String?
+  expiresAt      DateTime?
+  history        Json?        // optional: keep counters/history entries
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([conversationId])
+  @@index([itemId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// RBAC: allow multiple role assignments with optional scope
+model UserRoleAssignment {
+  id      String   @id @default(cuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id])
+  role    UserRole
+  scope   String?  // e.g. 'ESCROW', 'BLOG', null = global
+  createdAt DateTime @default(now())
+
+  @@unique([userId, role, scope])
+  @@index([userId, role])
+}
+
+// Loyalty models
+model LoyaltyLedger {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  delta     Int
+  reason    String?
+  refType   String?
+  refId     String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model LoyaltySummary {
+  userId      String      @id
+  user        User        @relation(fields: [userId], references: [id])
+  totalPoints Int         @default(0)
+  tier        LoyaltyTier @default(BRONZE)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }

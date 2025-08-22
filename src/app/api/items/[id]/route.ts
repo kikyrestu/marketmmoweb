@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma"
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  context: any
 ) {
   try {
+    const params = context?.params as { id: string }
     const item = await prisma.item.findUnique({
       where: { id: params.id },
       select: {

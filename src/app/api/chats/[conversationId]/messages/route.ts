@@ -2,17 +2,19 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { chatHub } from '@/lib/chatHub'
 
-// GET messages with cursor pagination
-export async function GET(_req: Request, { params }: { params: { conversationId: string } }) {
+// params.conversationId represents conversation id
+export async function GET(_req: Request, context: any) {
   try {
+  const params = context?.params as { conversationId: string }
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
     const user = await prisma.user.findUnique({ where: { email: session.user.email } })
     if (!user) return NextResponse.json({ message: 'User not found' }, { status: 404 })
 
     const { searchParams } = new URL(_req.url)
-    const cursor = searchParams.get('cursor') // message id
+    const cursor = searchParams.get('cursor')
     const limit = Number(searchParams.get('limit') || 30)
 
     const participant = await (prisma as any).conversationParticipant.findFirst({
@@ -29,22 +31,19 @@ export async function GET(_req: Request, { params }: { params: { conversationId:
       select: { id: true, body: true, createdAt: true, senderId: true }
     })
 
-    const hasMore = messages.length > limit
+  const hasMore = messages.length > limit
     const sliced = hasMore ? messages.slice(0, -1) : messages
 
-    return NextResponse.json({
-      messages: sliced.reverse(),
-      nextCursor: hasMore ? sliced[0].id : null
-    })
+    return NextResponse.json({ messages: sliced.reverse(), nextCursor: hasMore ? sliced[0].id : null })
   } catch (e) {
     console.error('[CHAT_MESSAGES_GET]', e)
     return NextResponse.json({ message: 'Internal error' }, { status: 500 })
   }
 }
 
-// POST send message
-export async function POST(req: Request, { params }: { params: { conversationId: string } }) {
+export async function POST(req: Request, context: any) {
   try {
+  const params = context?.params as { conversationId: string }
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
     const user = await prisma.user.findUnique({ where: { email: session.user.email } })
@@ -73,6 +72,25 @@ export async function POST(req: Request, { params }: { params: { conversationId:
       where: { id: params.conversationId },
       data: { lastMessageAt: new Date() }
     })
+
+    try {
+      const participants = await (prisma as any).conversationParticipant.findMany({
+        where: { conversationId: params.conversationId },
+        select: { userId: true }
+      })
+      const ids = participants.map((p: any) => p.userId)
+      chatHub.broadcastToUsers(ids, (uid) => ({
+        type: 'conversation.update',
+        conversationId: params.conversationId,
+        lastMessage: { id: message.id, body: message.body, createdAt: message.createdAt.toISOString(), senderId: message.senderId },
+        unreadCount: uid === message.senderId ? 0 : 1
+      }))
+      chatHub.broadcastToUsers(ids, () => ({
+        type: 'message.new',
+        conversationId: params.conversationId,
+        message: { id: message.id, body: message.body, createdAt: message.createdAt.toISOString(), senderId: message.senderId }
+      }))
+    } catch (err) { console.error('Broadcast error', err) }
 
     return NextResponse.json(message)
   } catch (e) {
