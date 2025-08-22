@@ -1,6 +1,7 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { compare } from "bcrypt"
+import speakeasy from "speakeasy"
 import { prisma } from '@/lib/prisma'
 
 // Hapus instansiasi PrismaClient langsung; gunakan singleton prisma
@@ -11,7 +12,8 @@ export const authOptions: NextAuthOptions = {
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
+        otp: { label: "One-Time Password", type: "text" }
       },
       async authorize(credentials) {
         try {
@@ -36,8 +38,22 @@ export const authOptions: NextAuthOptions = {
             console.warn('[AUTH] Invalid password for', email)
             return null
           }
+
+          if (user.twoFactorEnabled) {
+            if (!credentials.otp) {
+              throw new Error('OTP_REQUIRED')
+            }
+            const verified = speakeasy.totp.verify({
+              secret: user.twoFactorSecret!,
+              encoding: 'base32',
+              token: credentials.otp
+            })
+            if (!verified) {
+              throw new Error('INVALID_OTP')
+            }
+          }
           console.log('[AUTH] Login success', email, 'role=', user.role)
-          return { id: user.id, email: user.email, name: user.name, role: user.role }
+          return { id: user.id, email: user.email, name: user.name, role: user.role, twoFactorEnabled: user.twoFactorEnabled, twoFactorVerified: true }
         } catch (e) {
           console.error('[AUTH] Authorize error', e)
           return null
@@ -48,7 +64,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user, trigger, session }) {
       if (user) {
-        return { ...token, id: user.id, role: (user as any).role }
+        return { ...token, id: user.id, role: (user as any).role, twoFactorEnabled: (user as any).twoFactorEnabled, twoFactorVerified: (user as any).twoFactorVerified }
       }
       if (trigger === "update" && session) {
         return { ...token, ...session }
@@ -57,13 +73,13 @@ export const authOptions: NextAuthOptions = {
         if (token.email) {
           const latestUser = await prisma.user.findUnique({
             where: { email: token.email as string },
-            select: { id: true, role: true }
+            select: { id: true, role: true, twoFactorEnabled: true }
           })
-          if (latestUser && latestUser.role !== token.role) {
-            return { ...token, role: latestUser.role }
+          if (latestUser && (latestUser.role !== token.role || latestUser.twoFactorEnabled !== token.twoFactorEnabled)) {
+            return { ...token, role: latestUser.role, twoFactorEnabled: latestUser.twoFactorEnabled }
           }
         }
-      } catch (e) {
+      } catch {
         // swallow
       }
       return token
@@ -74,7 +90,9 @@ export const authOptions: NextAuthOptions = {
         user: {
           ...session.user,
           id: token.id,
-          role: token.role
+          role: token.role,
+          twoFactorEnabled: token.twoFactorEnabled,
+          twoFactorVerified: token.twoFactorVerified
         }
       }
     }
