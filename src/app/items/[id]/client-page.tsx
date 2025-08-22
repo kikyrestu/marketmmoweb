@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { useSession, signIn } from 'next-auth/react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Separator as Hr } from '@/components/ui/separator'
+import { useEffect } from 'react'
 
 type ItemDetails = {
   id: string
@@ -32,6 +33,20 @@ export function ClientSideItemPage({ item }: { item: ItemDetails }) {
   const [startingChat, setStartingChat] = useState(false)
   const { data: session, status } = useSession()
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+  const [rating, setRating] = useState<{ avg: number; count: number }>({ avg: 0, count: 0 })
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/reviews?sellerId=${item.seller.id}`)
+        if (res.ok) {
+          const data = await res.json()
+          setRating({ avg: data.avgRating || 0, count: data.numReviews || 0 })
+        }
+      } catch {}
+    }
+    load()
+  }, [item.seller.id])
 
   const handleStartChat = async () => {
     if (!session?.user) {
@@ -91,6 +106,9 @@ export function ClientSideItemPage({ item }: { item: ItemDetails }) {
             <div className="mt-4 flex items-center gap-2">
               <span className="text-muted-foreground">Sold by {item.seller.name}</span>
               <VerificationBadge isVerified={item.seller.verificationStatus === "VERIFIED"} />
+              {rating.count > 0 && (
+                <span className="text-sm text-muted-foreground">⭐ {rating.avg.toFixed(1)} ({rating.count})</span>
+              )}
             </div>
 
             <Separator className="my-4" />

@@ -5,6 +5,10 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { EmptyState } from "@/components/ui/empty-state"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Table,
   TableBody,
@@ -37,6 +41,12 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [selectedTransaction, setSelectedTransaction] = useState<string | null>(null)
+  const [rating, setRating] = useState("5")
+  const [comment, setComment] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [reviewed, setReviewed] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -139,7 +149,7 @@ export default function TransactionsPage() {
                 <TableCell>
                   {new Date(transaction.createdAt).toLocaleDateString()}
                 </TableCell>
-                <TableCell>
+                <TableCell className="space-x-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -147,12 +157,91 @@ export default function TransactionsPage() {
                   >
                     View Details
                   </Button>
+                  {transaction.status === "COMPLETED" && (
+                    reviewed[transaction.id] ? (
+                      <span className="text-xs text-muted-foreground">Reviewed</span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setSelectedTransaction(transaction.id)
+                          setReviewOpen(true)
+                        }}
+                      >
+                        Leave Review
+                      </Button>
+                    )
+                  )}
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Leave a Review</DialogTitle>
+            <DialogDescription>Your feedback helps other users.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="rating">Rating</Label>
+              <Select value={rating} onValueChange={setRating}>
+                <SelectTrigger id="rating">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1,2,3,4,5].map(n => (
+                    <SelectItem key={n} value={String(n)}>{n} Star{n>1?'s':''}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="comment">Comment</Label>
+              <Textarea
+                id="comment"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <Button
+              onClick={async () => {
+                if (!selectedTransaction) return
+                setSubmitting(true)
+                try {
+                  const res = await fetch('/api/reviews', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      transactionId: selectedTransaction,
+                      rating: Number(rating),
+                      comment
+                    })
+                  })
+                  if (res.ok) {
+                    setReviewed(prev => ({ ...prev, [selectedTransaction]: true }))
+                    setReviewOpen(false)
+                    setComment("")
+                    setRating("5")
+                  } else {
+                    const data = await res.json().catch(() => ({}))
+                    alert(data.message || 'Failed to submit review')
+                  }
+                } finally {
+                  setSubmitting(false)
+                }
+              }}
+              disabled={submitting}
+            >
+              {submitting ? 'Submitting...' : 'Submit Review'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

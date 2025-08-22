@@ -4,11 +4,28 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
 
 export default function SellerDashboard() {
   const router = useRouter()
   const [isDowngrading, setIsDowngrading] = useState(false)
+  const { data: session } = useSession()
+  const [rating, setRating] = useState<{ avg: number; count: number }>({ avg: 0, count: 0 })
+
+  useEffect(() => {
+    const load = async () => {
+      if (!session?.user?.id) return
+      try {
+        const res = await fetch(`/api/reviews?sellerId=${session.user.id}`)
+        if (res.ok) {
+          const data = await res.json()
+          setRating({ avg: data.avgRating || 0, count: data.numReviews || 0 })
+        }
+      } catch {}
+    }
+    load()
+  }, [session?.user?.id])
 
   const handleDowngrade = async () => {
     if (!confirm("Are you sure you want to switch back to buyer mode? You can always become a seller again later.")) {
@@ -53,7 +70,7 @@ export default function SellerDashboard() {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid gap-4 md:grid-cols-3 mb-6">
+      <div className="grid gap-4 md:grid-cols-4 mb-6">
         <Card>
           <CardHeader>
             <CardTitle>Active Listings</CardTitle>
@@ -79,6 +96,16 @@ export default function SellerDashboard() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">Rp 0</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Rating</CardTitle>
+            <CardDescription>Your seller rating</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{rating.avg.toFixed(1)}</p>
+            <p className="text-sm text-muted-foreground">{rating.count} reviews</p>
           </CardContent>
         </Card>
       </div>
