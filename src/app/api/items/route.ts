@@ -24,7 +24,10 @@ export async function GET() {
     }
 
     const items = await prisma.item.findMany({
-      where: { isAvailable: true },
+      where: { 
+        isAvailable: true
+        // Include all items now, including temporary ones
+      },
       select: {
         id: true,
         name: true,
@@ -50,7 +53,6 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-    if (session.user.role !== 'SELLER') return NextResponse.json({ message: 'Only sellers can add items' }, { status: 403 })
 
     let name: string | undefined
     let description: string | undefined
@@ -58,6 +60,10 @@ export async function POST(request: Request) {
     let imageUrl: string | undefined
     let categoryId: string | undefined
     let rawFields: any = undefined
+    let isTemporary: boolean = false
+    let game: string | undefined
+    let currency: string | undefined
+    let images: string[] | undefined
 
     const contentType = request.headers.get('content-type') || ''
     if (contentType.includes('multipart/form-data')) {
@@ -65,7 +71,7 @@ export async function POST(request: Request) {
       name = formData.get('name') as string
       description = formData.get('description') as string
       const priceStr = formData.get('price') as string
-      price = priceStr ? Number(priceStr) : undefined
+      price = priceStr ? parseFloat(priceStr) : undefined
       categoryId = formData.get('categoryId') as string | undefined
       const fieldsStr = formData.get('fields') as string | undefined
       if (fieldsStr) { try { rawFields = JSON.parse(fieldsStr) } catch { /* ignore */ } }
@@ -86,52 +92,73 @@ export async function POST(request: Request) {
       const json = await request.json()
       name = json.name
       description = json.description
-      price = json.price
+      price = json.price ? parseFloat(json.price) : undefined
       imageUrl = json.imageUrl
       categoryId = json.categoryId
       rawFields = json.fields
+      isTemporary = json.isTemporary || false
+      game = json.game
+      currency = json.currency
+      images = json.images
     }
 
     if (!name || !name.trim()) return NextResponse.json({ message: 'Name is required' }, { status: 400 })
     if (!description || !description.trim()) return NextResponse.json({ message: 'Description is required' }, { status: 400 })
     if (!price || price <= 0) return NextResponse.json({ message: 'Price must be greater than 0' }, { status: 400 })
 
+    // For temporary items, allow any user role and use the first image from images array
+    if (isTemporary) {
+      if (images && images.length > 0) {
+        imageUrl = images[0]
+      }
+    } else {
+      // For regular items, require SELLER role
+      if (session.user.role !== 'SELLER') return NextResponse.json({ message: 'Only sellers can add items' }, { status: 403 })
+    }
+
     let itemCategory = null
-    if (categoryId) itemCategory = await prisma.category.findUnique({ where: { id: categoryId } })
-    if (!itemCategory) itemCategory = await prisma.category.findFirst({ where: { name: 'Items' } })
+    if (categoryId && categoryId !== 'temp-quick-sell') {
+      itemCategory = await prisma.category.findUnique({ where: { id: categoryId } })
+    }
+    if (!itemCategory) {
+      itemCategory = await prisma.category.findFirst({ where: { name: 'Items' } })
+    }
     if (!itemCategory) return NextResponse.json({ message: 'Default category not found' }, { status: 500 })
 
     const seller = await prisma.user.findUnique({ where: { email: session.user.email } })
     if (!seller) return NextResponse.json({ message: 'Seller not found' }, { status: 404 })
 
-    const defs = await (prisma as any).itemFieldDefinition.findMany({ where: { isActive: true, scope: 'GLOBAL' } })
-    const defMap = new Map(defs.map((d: any) => [d.key, d]))
-    const errors: string[] = []
+    // For temporary items, skip field validation
     const valuesToCreate: any[] = []
-    const fields = rawFields && typeof rawFields === 'object' ? rawFields : {}
-    for (const [key, rawVal] of Object.entries(fields)) {
-      const def: any = defMap.get(key)
-      if (!def) { errors.push(`Unknown field ${key}`); continue }
-      if (def.type === 'TEXT') {
-        if (typeof rawVal !== 'string') { errors.push(`${key} must be string`); continue }
-        const val = rawVal.trim()
-        if (def.required && !val) errors.push(`${key} required`)
-        valuesToCreate.push({ fieldDefinitionId: def.id, valueText: val || null })
-      } else if (def.type === 'NUMBER') {
-        const num = typeof rawVal === 'number' ? rawVal : Number(rawVal)
-        if (!isNumber(num)) { errors.push(`${key} must be number`); continue }
-        valuesToCreate.push({ fieldDefinitionId: def.id, valueNumber: Math.trunc(num) })
-      } else if (def.type === 'SELECT') {
-        if (typeof rawVal !== 'string') { errors.push(`${key} must be string`); continue }
-        if (!Array.isArray(def.options) || def.options.length === 0) { errors.push(`${key} misconfigured options`); continue }
-        if (!def.options.includes(rawVal)) { errors.push(`${key} invalid option`); continue }
-        valuesToCreate.push({ fieldDefinitionId: def.id, valueText: rawVal })
+    if (!isTemporary) {
+      const defs = await (prisma as any).itemFieldDefinition.findMany({ where: { isActive: true, scope: 'GLOBAL' } })
+      const defMap = new Map(defs.map((d: any) => [d.key, d]))
+      const errors: string[] = []
+      const fields = rawFields && typeof rawFields === 'object' ? rawFields : {}
+      for (const [key, rawVal] of Object.entries(fields)) {
+        const def: any = defMap.get(key)
+        if (!def) { errors.push(`Unknown field ${key}`); continue }
+        if (def.type === 'TEXT') {
+          if (typeof rawVal !== 'string') { errors.push(`${key} must be string`); continue }
+          const val = rawVal.trim()
+          if (def.required && !val) errors.push(`${key} required`)
+          valuesToCreate.push({ fieldDefinitionId: def.id, valueText: val || null })
+        } else if (def.type === 'NUMBER') {
+          const num = typeof rawVal === 'number' ? rawVal : Number(rawVal)
+          if (!isNumber(num)) { errors.push(`${key} must be number`); continue }
+          valuesToCreate.push({ fieldDefinitionId: def.id, valueNumber: Math.trunc(num) })
+        } else if (def.type === 'SELECT') {
+          if (typeof rawVal !== 'string') { errors.push(`${key} must be string`); continue }
+          if (!Array.isArray(def.options) || def.options.length === 0) { errors.push(`${key} misconfigured options`); continue }
+          if (!def.options.includes(rawVal)) { errors.push(`${key} invalid option`); continue }
+          valuesToCreate.push({ fieldDefinitionId: def.id, valueText: rawVal })
+        }
       }
+      for (const def of defs) {
+        if (def.required && !valuesToCreate.find(v => v.fieldDefinitionId === def.id)) errors.push(`Missing required field ${def.key}`)
+      }
+      if (errors.length) return NextResponse.json({ message: 'Validation failed', errors }, { status: 400 })
     }
-    for (const def of defs) {
-      if (def.required && !valuesToCreate.find(v => v.fieldDefinitionId === def.id)) errors.push(`Missing required field ${def.key}`)
-    }
-    if (errors.length) return NextResponse.json({ message: 'Validation failed', errors }, { status: 400 })
 
     const item = await prisma.item.create({
       data: {
@@ -139,7 +166,7 @@ export async function POST(request: Request) {
         description: description.trim(),
         price,
         imageUrl: imageUrl?.trim(),
-        isAvailable: true,
+        isAvailable: !isTemporary, // Temporary items are not available for purchase
         seller: { connect: { id: seller.id } },
         category: { connect: { id: itemCategory.id } }
       },

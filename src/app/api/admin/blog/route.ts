@@ -15,7 +15,15 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session?.user || session.user.role !== 'ADMIN') return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+  console.log('[ADMIN_BLOG_POST] Session:', session);
+  if (!session?.user) {
+    console.log('[ADMIN_BLOG_POST] No user in session');
+    return NextResponse.json({ message: 'Unauthorized: No user in session' }, { status: 401 })
+  }
+  if (session.user.role !== 'ADMIN') {
+    console.log('[ADMIN_BLOG_POST] User role is not ADMIN:', session.user.role);
+    return NextResponse.json({ message: 'Unauthorized: User role is not ADMIN' }, { status: 401 })
+  }
   try {
     const ct = req.headers.get('content-type') || ''
     let title: string | undefined

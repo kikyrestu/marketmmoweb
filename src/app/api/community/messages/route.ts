@@ -45,7 +45,7 @@ export async function GET(req: Request) {
       take: take + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       where: room ? { roomId: room.id } : { roomId: null },
-      select: { id: true, body: true, createdAt: true, senderId: true, replyToId: true, imageUrl: true, replyTo: { select: { id: true, body: true, sender: { select: { name: true } } } }, sender: { select: { name: true } } }
+      select: { id: true, body: true, createdAt: true, senderId: true, replyToId: true, imageUrl: true, type: true, itemId: true, itemData: true, replyTo: { select: { id: true, body: true, sender: { select: { name: true } } } }, sender: { select: { name: true } } }
     })
 
     const hasMore = messages.length > take
@@ -53,7 +53,19 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       room: room ? { slug: room.slug } : null,
-      messages: slice.reverse().map((m: any) => ({ id: m.id, body: m.body, createdAt: m.createdAt, senderId: m.senderId, senderName: m.sender.name, replyToId: m.replyToId, replyPreview: m.replyTo ? { id: m.replyTo.id, body: m.replyTo.body, senderName: m.replyTo.sender.name } : null, imageUrl: m.imageUrl })),
+      messages: slice.reverse().map((m: any) => ({
+        id: m.id,
+        body: m.body,
+        createdAt: m.createdAt,
+        senderId: m.senderId,
+        senderName: m.sender.name,
+        replyToId: m.replyToId,
+        replyPreview: m.replyTo ? { id: m.replyTo.id, body: m.replyTo.body, senderName: m.replyTo.sender.name } : null,
+        imageUrl: m.imageUrl,
+        type: m.type,
+        itemId: m.itemId,
+        itemData: m.itemData
+      })),
       nextCursor: hasMore ? slice[0].id : null
     })
   } catch (e) {
@@ -70,16 +82,23 @@ export async function POST(req: Request) {
     const user = await prisma.user.findUnique({ where: { email: session.user.email } })
     if (!user) return NextResponse.json({ message: 'User not found' }, { status: 404 })
     const contentType = req.headers.get('content-type') || ''
-  let body: string | undefined
+    let body: string | undefined
     let replyToId: string | undefined
     let imageUrl: string | undefined
-  let roomSlug: string | undefined
-  let room: any = null
-  if (contentType.includes('multipart/form-data')) {
-  const form = await req.formData()
+    let roomSlug: string | undefined
+    let room: any = null
+    let jsonData: any = null
+    let type: string | undefined = undefined;
+    let itemId: string | undefined = undefined;
+    let itemData: any = undefined;
+
+    if (contentType.includes('multipart/form-data')) {
+      const form = await req.formData()
       body = (form.get('body') as string) || ''
       replyToId = (form.get('replyToId') as string) || undefined
-  roomSlug = (form.get('room') as string) || undefined
+      roomSlug = (form.get('room') as string) || undefined
+      type = (form.get('type') as string) || undefined;
+      itemId = (form.get('itemId') as string) || undefined;
       const file = form.get('image') as File | null
       if (file && file.size > 0) {
         if (!file.type.startsWith('image/')) return NextResponse.json({ message: 'Invalid image type' }, { status: 415 })
@@ -96,17 +115,23 @@ export async function POST(req: Request) {
         imageUrl = pool.visibility === 'public' ? (put.url || pool.getPublicUrl(put.key) || undefined) : undefined
       }
     } else {
-      const json = await req.json()
-      body = json.body
-      replyToId = json.replyToId
-      roomSlug = json.room
+      jsonData = await req.json()
+      body = jsonData.body
+      replyToId = jsonData.replyToId
+      roomSlug = jsonData.room
+      type = jsonData.type;
+      itemId = jsonData.itemId;
+      itemData = jsonData.itemData;
     }
+
     if (roomSlug) {
-  room = await (prisma as any).communityRoom.findUnique({ where: { slug: roomSlug }, select: { id: true, slug: true, wordFilter: true } })
+      room = await (prisma as any).communityRoom.findUnique({ where: { slug: roomSlug }, select: { id: true, slug: true, wordFilter: true } })
       if (!room) return NextResponse.json({ message: 'Room not found' }, { status: 404 })
     }
+
     if ((!body || !body.trim()) && !imageUrl) return NextResponse.json({ message: 'Empty message' }, { status: 400 })
     if (body && body.length > 5000) return NextResponse.json({ message: 'Message too long' }, { status: 413 })
+
     // word filter enforcement (simple whole-word case-insensitive replace with asterisks)
     if (body && room?.wordFilter?.length) {
       const words: string[] = room.wordFilter.filter((w: string) => w.trim().length > 0)
@@ -120,15 +145,39 @@ export async function POST(req: Request) {
     if (replyToId) {
       parent = await prisma.communityMessage.findUnique({ where: { id: replyToId }, select: { id: true, body: true, sender: { select: { name: true } } } })
     }
+
     const msg = await (prisma as any).communityMessage.create({
-      data: { body: (body || '').trim(), senderId: user.id, imageUrl, ...(replyToId ? { replyToId } : {}), ...(room ? { roomId: room.id } : { roomId: null }) },
-      select: { id: true, body: true, createdAt: true, senderId: true, replyToId: true, imageUrl: true, roomId: true }
+      data: {
+        body: (body || '').trim(),
+        senderId: user.id,
+        imageUrl,
+        ...(replyToId ? { replyToId } : {}),
+        ...(room ? { roomId: room.id } : { roomId: null }),
+        ...(type ? { type } : {}),
+        ...(itemId ? { itemId } : {}),
+        ...(itemData ? { itemData } : {}),
+      },
+      select: { id: true, body: true, createdAt: true, senderId: true, replyToId: true, imageUrl: true, type: true, itemId: true, itemData: true, replyTo: { select: { id: true, body: true, sender: { select: { name: true } } } }, sender: { select: { name: true } } }
     })
-    const senderName = user.name
 
-  chatHub.broadcastAll({ type: 'community.message.new', message: { id: msg.id, body: msg.body, createdAt: msg.createdAt.toISOString(), senderId: msg.senderId, senderName, replyToId: msg.replyToId, replyPreview: parent ? { id: parent.id, body: parent.body, senderName: parent.sender.name } : null, imageUrl: msg.imageUrl, roomId: msg.roomId, roomSlug: room?.slug || null } } as any)
+    // Broadcast via chat hub
+    const messageData = {
+      id: msg.id,
+      body: msg.body,
+      createdAt: msg.createdAt,
+      senderId: msg.senderId,
+      senderName: msg.sender.name,
+      replyToId: msg.replyToId,
+      replyPreview: parent ? { id: parent.id, body: parent.body, senderName: parent.sender.name } : null,
+      imageUrl: msg.imageUrl,
+      type: msg.type,
+      itemId: msg.itemId,
+      itemData: msg.itemData,
+      roomSlug: room?.slug
+    }
+    chatHub.broadcastAll({ type: 'community.message.new', message: messageData } as any)
 
-  return NextResponse.json({ id: msg.id, body: msg.body, createdAt: msg.createdAt, senderId: msg.senderId, senderName, replyToId: msg.replyToId, replyPreview: parent ? { id: parent.id, body: parent.body, senderName: parent.sender.name } : null, imageUrl: msg.imageUrl, roomSlug: room?.slug || null })
+    return NextResponse.json(messageData)
   } catch (e) {
     console.error('[COMMUNITY_POST]', e)
     return NextResponse.json({ message: 'Internal error' }, { status: 500 })

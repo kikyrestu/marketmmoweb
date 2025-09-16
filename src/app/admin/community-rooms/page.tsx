@@ -76,8 +76,8 @@ export default function CommunityRoomsAdminPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Community Rooms</h1>
-          <p className="text-xs text-muted-foreground">Buat & kelola room chat komunitas khusus.</p>
+          <h1 className="text-xl font-semibold">Ruang Komunitas</h1>
+          <p className="text-xs text-muted-foreground">Buat & kelola ruang chat komunitas khusus.</p>
         </div>
       </div>
   <form onSubmit={createRoom} className="grid gap-3 md:grid-cols-6 border rounded p-4 text-sm">
@@ -86,15 +86,15 @@ export default function CommunityRoomsAdminPage() {
           <input required value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} className="border rounded px-2 py-1" />
         </div>
         <div className="flex flex-col col-span-2">
-          <label className="text-[11px] font-medium">Slug (optional)</label>
-            <input value={form.slug} onChange={e=>setForm(f=>({...f,slug:e.target.value}))} placeholder="auto-dari-nama" className="border rounded px-2 py-1" pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$" title="lowercase, angka, dan dash (contoh: room-mlbb-indo)" />
+          <label className="text-[11px] font-medium">Slug (opsional)</label>
+            <input value={form.slug} onChange={e=>setForm(f=>({...f,slug:e.target.value}))} placeholder="auto-dari-nama" className="border rounded px-2 py-1" pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$" title="huruf kecil, angka, dan tanda hubung (contoh: room-mlbb-indo)" />
         </div>
         <div className="flex flex-col col-span-2">
-          <label className="text-[11px] font-medium">Game Name</label>
+          <label className="text-[11px] font-medium">Nama Game</label>
           <input value={form.gameName} onChange={e=>setForm(f=>({...f,gameName:e.target.value}))} className="border rounded px-2 py-1" />
         </div>
         <div className="flex flex-col md:col-span-3">
-          <label className="text-[11px] font-medium">Tags (comma)</label>
+          <label className="text-[11px] font-medium">Tag (dipisah koma)</label>
           <input value={form.tags} onChange={e=>setForm(f=>({...f,tags:e.target.value}))} className="border rounded px-2 py-1" />
         </div>
         <div className="flex flex-col md:col-span-3">

@@ -6,9 +6,8 @@ import { chatHub } from '@/lib/chatHub'
 import { notificationHub } from '@/lib/notificationHub'
 
 // params.conversationId represents conversation id
-export async function GET(_req: Request, context: any) {
+export async function GET(_req: Request, { params }: { params: Promise<{ conversationId: string }> }) {
   try {
-  const params = context?.params as { conversationId: string }
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
     const user = await prisma.user.findUnique({ where: { email: session.user.email } })
@@ -18,18 +17,27 @@ export async function GET(_req: Request, context: any) {
     const cursor = searchParams.get('cursor')
     const limit = Number(searchParams.get('limit') || 30)
 
+    const { conversationId } = await params
+
     const participant = await (prisma as any).conversationParticipant.findFirst({
-      where: { conversationId: params.conversationId, userId: user.id },
+      where: { conversationId: conversationId, userId: user.id },
       select: { id: true }
     })
     if (!participant) return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
 
     const messages = await (prisma as any).chatMessage.findMany({
-      where: { conversationId: params.conversationId },
+      where: { conversationId: conversationId },
       orderBy: { createdAt: 'desc' },
       take: limit + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-      select: { id: true, body: true, createdAt: true, senderId: true }
+      select: { 
+        id: true, 
+        body: true, 
+        createdAt: true, 
+        senderId: true,
+        imageUrl: true,
+        sender: { select: { role: true, name: true } }
+      }
     })
 
   const hasMore = messages.length > limit
@@ -42,9 +50,8 @@ export async function GET(_req: Request, context: any) {
   }
 }
 
-export async function POST(req: Request, context: any) {
+export async function POST(req: Request, { params }: { params: Promise<{ conversationId: string }> }) {
   try {
-  const params = context?.params as { conversationId: string }
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
     const user = await prisma.user.findUnique({ where: { email: session.user.email } })
@@ -54,47 +61,76 @@ export async function POST(req: Request, context: any) {
     if (!body || !body.trim()) return NextResponse.json({ message: 'Empty body' }, { status: 400 })
     if (body.length > 65535) return NextResponse.json({ message: 'Message too long' }, { status: 413 })
 
+    const { conversationId } = await params
+
     const participant = await (prisma as any).conversationParticipant.findFirst({
-      where: { conversationId: params.conversationId, userId: user.id },
+      where: { conversationId: conversationId, userId: user.id },
       select: { id: true }
     })
     if (!participant) return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
 
     const message = await (prisma as any).chatMessage.create({
       data: {
-        conversation: { connect: { id: params.conversationId } },
+        conversation: { connect: { id: conversationId } },
         sender: { connect: { id: user.id } },
         body: body.trim()
       },
-      select: { id: true, body: true, createdAt: true, senderId: true }
+      select: { 
+        id: true, 
+        body: true, 
+        createdAt: true, 
+        senderId: true,
+        imageUrl: true,
+        sender: { select: { role: true, name: true } }
+      }
     })
 
     await (prisma as any).conversation.update({
-      where: { id: params.conversationId },
+      where: { id: conversationId },
       data: { lastMessageAt: new Date() }
     })
 
     try {
       const participants = await (prisma as any).conversationParticipant.findMany({
-        where: { conversationId: params.conversationId },
+        where: { conversationId: conversationId },
         select: { userId: true }
       })
       const ids = participants.map((p: any) => p.userId)
       chatHub.broadcastToUsers(ids, (uid) => ({
         type: 'conversation.update',
-        conversationId: params.conversationId,
-        lastMessage: { id: message.id, body: message.body, createdAt: message.createdAt.toISOString(), senderId: message.senderId },
+        conversationId: conversationId,
+        lastMessage: { 
+          id: message.id, 
+          body: message.body, 
+          createdAt: message.createdAt.toISOString(), 
+          senderId: message.senderId,
+          imageUrl: message.imageUrl,
+          sender: message.sender
+        },
         unreadCount: uid === message.senderId ? 0 : 1
       }))
       chatHub.broadcastToUsers(ids, () => ({
         type: 'message.new',
-        conversationId: params.conversationId,
-        message: { id: message.id, body: message.body, createdAt: message.createdAt.toISOString(), senderId: message.senderId }
+        conversationId: conversationId,
+        message: { 
+          id: message.id, 
+          body: message.body, 
+          createdAt: message.createdAt.toISOString(), 
+          senderId: message.senderId,
+          imageUrl: message.imageUrl,
+          sender: message.sender
+        }
       }))
       notificationHub.broadcastToUsers(ids.filter((id: string) => id !== message.senderId), () => ({
-        type: 'chat.message',
-        conversationId: params.conversationId,
-        message: { id: message.id, body: message.body, senderId: message.senderId }
+        type: 'notification.new',
+        conversationId: conversationId,
+        notification: { 
+          id: message.id, 
+          type: 'chat', 
+          title: 'New message', 
+          message: `${user.name}: ${body.trim().substring(0, 50)}${body.trim().length > 50 ? '...' : ''}`,
+          createdAt: new Date().toISOString()
+        }
       }))
     } catch (err) { console.error('Broadcast error', err) }
 

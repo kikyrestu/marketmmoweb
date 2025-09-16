@@ -32,7 +32,7 @@ function RoomList() {
               <div className='font-semibold text-sm truncate'>{r.name}</div>
               <div className='flex gap-2 flex-wrap text-[10px] text-muted-foreground mt-1'>
                 {r.gameName && <span className='truncate'>{r.gameName}</span>}
-                {r.tags?.slice(0,3).map((t:string)=> <span key={t} className='px-1 py-0.5 bg-muted rounded'>{t}</span>)}
+                {r.tags?.slice(0,3).map((t:string, idx: number)=> <span key={`${t}-${idx}`} className='px-1 py-0.5 bg-muted rounded'>{t}</span>)}
               </div>
               <div className='mt-1 flex gap-2 text-[10px]'>
                 <span className='px-1.5 py-0.5 rounded bg-muted'>👥 {r._count?.members ?? 0}</span>
@@ -113,38 +113,43 @@ export default function CommunityPage() {
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const send = async () => {
-    if (!currentUserId) return // must login
-    if (( !input.trim() && !imageFile) || sending) return
-    setSending(true)
-    setErrorMsg(null)
-    const body = input.trim()
+    if (!currentUserId) {
+      import('sonner').then(({ toast }) => toast.error('Login dulu untuk mengirim pesan!'));
+      return;
+    }
+    if (( !input.trim() && !imageFile) || sending) return;
+    setSending(true);
+    setErrorMsg(null);
+    const body = input.trim();
     try {
-      let res: Response
+      let res: Response;
       if (imageFile) {
-        const form = new FormData()
-        if (body) form.append('body', body)
-        if (replyTarget?.id) form.append('replyToId', replyTarget.id)
-        form.append('image', imageFile)
-        res = await fetch('/api/community/messages', { method: 'POST', body: form })
+        const form = new FormData();
+        if (body) form.append('body', body);
+        if (replyTarget?.id) form.append('replyToId', replyTarget.id);
+        form.append('image', imageFile);
+        res = await fetch('/api/community/messages', { method: 'POST', body: form });
       } else {
-        res = await fetch('/api/community/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body, replyToId: replyTarget?.id }) })
+        res = await fetch('/api/community/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body, replyToId: replyTarget?.id }) });
       }
       if (!res.ok) {
-        let serverMsg = 'Failed'
+        let serverMsg = 'Failed';
         try { serverMsg = (await res.json()).message || serverMsg } catch {}
-        throw new Error(serverMsg)
+        import('sonner').then(({ toast }) => toast.error(serverMsg));
+        throw new Error(serverMsg);
       }
-      const msg = await res.json()
-      setMessages(prev => merge(prev, { ...msg, createdAt: msg.createdAt })) // SSE duplicate safe
-      setInput('')
-      setReplyTarget(null)
-      setImageFile(null)
-      setImagePreview(null)
-      scrollToBottom()
+      const msg = await res.json();
+      setMessages(prev => merge(prev, { ...msg, createdAt: msg.createdAt })); // SSE duplicate safe
+      setInput('');
+      setReplyTarget(null);
+      setImageFile(null);
+      setImagePreview(null);
+      scrollToBottom();
+      import('sonner').then(({ toast }) => toast.success('Pesan terkirim!'));
     } catch (e: any) {
-      setErrorMsg(e.message || 'Error sending message')
-    } finally { setSending(false) }
-  }
+      setErrorMsg(e.message || 'Error sending message');
+    } finally { setSending(false); }
+  };
 
   useEffect(() => {
     if (!profileUserId) return
@@ -155,7 +160,16 @@ export default function CommunityPage() {
     }).finally(()=> setProfileLoading(false))
   }, [profileUserId])
 
-  if (loading) return <div className='container py-10 flex justify-center'><LoadingSpinner /></div>
+  if (loading) return (
+    <div className='container py-10 flex justify-center'>
+      <div className="w-full animate-pulse">
+        <div className="h-6 bg-muted rounded w-1/2 mb-2" />
+        <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+        <div className="h-32 bg-muted rounded" />
+        <div className="h-32 bg-muted rounded mt-2" />
+      </div>
+    </div>
+  );
 
   return (
     <div className='container max-w-3xl py-8'>
@@ -244,7 +258,7 @@ export default function CommunityPage() {
               </div>
               {errorMsg && <div className='text-[11px] text-red-500'>{errorMsg}</div>}
             </div>
-            <Button disabled={!currentUserId || sending || (!input.trim() && !imageFile)} onClick={send}>{currentUserId ? (sending ? 'Mengirim...' : 'Kirim') : 'Login dulu'}</Button>
+            <Button disabled={!currentUserId || sending || (!input.trim() && !imageFile)} onClick={send} aria-label="Send Message">{currentUserId ? (sending ? 'Mengirim...' : 'Kirim') : 'Login dulu'}</Button>
           </div>
         </div>
       </Card>

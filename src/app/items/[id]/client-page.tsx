@@ -41,6 +41,7 @@ export function ClientSideItemPage({ item }: { item: ItemDetails }) {
     if (startingChat) return
     setStartingChat(true)
     try {
+      // Use the new conversation API (primary)
       const res = await fetch('/api/chats/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -48,12 +49,23 @@ export function ClientSideItemPage({ item }: { item: ItemDetails }) {
       })
       if (!res.ok) throw new Error('Failed to start chat')
       const data = await res.json()
-      // Placeholder new route: /conversations/[id] (to be created). For now maybe fallback.
-      router.push(`/conversations/${data.conversationId}`)
+      router.push(`/conversations/${data.conversationId}?highlightItem=true`)
     } catch (e) {
       console.error(e)
-      // fallback legacy direct user chat for now
-      router.push(`/chats/${item.seller.id}`)
+      // Fallback to legacy messages API
+      try {
+        const res = await fetch('/api/messages/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipientId: item.seller.id, itemId: item.id })
+        })
+        if (!res.ok) throw new Error('Failed to start legacy chat')
+        const data = await res.json()
+        router.push(`/conversations/${data.conversationId}?highlightItem=true`)
+      } catch (fallbackError) {
+        console.error('Both chat methods failed:', fallbackError)
+        alert('Failed to start conversation')
+      }
     } finally {
       setStartingChat(false)
     }

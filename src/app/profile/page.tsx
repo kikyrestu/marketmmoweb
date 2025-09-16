@@ -4,28 +4,15 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { UserCircle } from "lucide-react"
+
 
 const profileFormSchema = z.object({
   name: z.string().min(2, {
@@ -46,6 +33,8 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>
 export default function ProfilePage() {
   const { data: session, update } = useSession()
   const [isLoading, setIsLoading] = useState(true)
+  const [skeleton, setSkeleton] = useState(true)
+  const [profileEmpty, setProfileEmpty] = useState(false)
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -61,10 +50,11 @@ export default function ProfilePage() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
+        setSkeleton(true)
         const response = await fetch("/api/user/profile")
         if (!response.ok) throw new Error("Failed to fetch profile")
-        
         const data = await response.json()
+        if (!data.name && !data.email) setProfileEmpty(true)
         form.reset({
           name: data.name,
           email: data.email,
@@ -76,15 +66,16 @@ export default function ProfilePage() {
         toast.error("Failed to load profile")
         console.error(error)
       } finally {
+        setSkeleton(false)
         setIsLoading(false)
       }
     }
-
     fetchProfile()
   }, [form])
 
   async function onSubmit(data: ProfileFormValues) {
     try {
+      if (!data.name && !data.email) setProfileEmpty(true)
       const response = await fetch("/api/user/profile", {
         method: "PUT",
         headers: {
@@ -92,11 +83,8 @@ export default function ProfilePage() {
         },
         body: JSON.stringify(data),
       })
-
       if (!response.ok) throw new Error("Failed to update profile")
-
       toast.success("Profile updated successfully")
-      
       // Update session data
       if (session?.user) {
         await update({
@@ -117,6 +105,19 @@ export default function ProfilePage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  if (profileEmpty) {
+    return (
+      <div className="container max-w-2xl py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Profile tidak ditemukan</CardTitle>
+            <CardDescription>Data profile Anda tidak tersedia. Silakan hubungi admin.</CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     )
   }

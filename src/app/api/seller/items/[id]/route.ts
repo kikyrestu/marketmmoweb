@@ -6,10 +6,10 @@ import { authOptions } from "@/lib/auth"
 
 export async function GET(
   request: Request,
-  context: any
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const params = context?.params as { id: string }
+    const { id } = await params
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) {
       return NextResponse.json(
@@ -40,7 +40,7 @@ export async function GET(
 
     // Get item
     const item = await prisma.item.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       include: {
         category: true,
         _count: {
@@ -78,10 +78,10 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  context: any
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const params = context?.params as { id: string }
+    const { id } = await params
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) {
       return NextResponse.json(
@@ -112,7 +112,7 @@ export async function PATCH(
 
     // Get item
     const item = await prisma.item.findUnique({
-      where: { id: params.id }
+      where: { id: id }
     })
 
     if (!item) {
@@ -156,7 +156,7 @@ export async function PATCH(
 
     // Update item
     const updatedItem = await prisma.item.update({
-      where: { id: params.id },
+      where: { id: id },
       data: updates,
       include: {
         category: true
@@ -175,10 +175,10 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  context: any
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const params = context?.params as { id: string }
+    const { id } = await params
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) {
       return NextResponse.json(
@@ -209,7 +209,7 @@ export async function DELETE(
 
     // Get item
     const item = await prisma.item.findUnique({
-      where: { id: params.id }
+      where: { id: id }
     })
 
     if (!item) {
@@ -229,7 +229,7 @@ export async function DELETE(
 
     // Delete item
     await prisma.item.delete({
-      where: { id: params.id }
+      where: { id: id }
     })
 
     return NextResponse.json({ success: true })

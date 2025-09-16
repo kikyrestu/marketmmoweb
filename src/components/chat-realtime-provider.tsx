@@ -1,8 +1,8 @@
 "use client"
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 
-type MessageNew = { type: 'message.new'; conversationId: string; message: { id: string; body: string; createdAt: string; senderId: string } }
-type ConvUpdate = { type: 'conversation.update'; conversationId: string; lastMessage: { id: string; body: string; createdAt: string; senderId: string }; unreadCount: number }
+type MessageNew = { type: 'message.new'; conversationId: string; message: { id: string; body: string; createdAt: string; senderId: string; imageUrl?: string | null; sender?: { role?: string; name?: string } } }
+type ConvUpdate = { type: 'conversation.update'; conversationId: string; lastMessage: { id: string; body: string; createdAt: string; senderId: string; imageUrl?: string | null }; unreadCount: number }
 type ReadUpdate = { type: 'read.update'; conversationId: string; unreadCount: number }
 type CommunityNew = { type: 'community.message.new'; message: { id: string; body: string; createdAt: string; senderId: string; senderName: string; replyToId?: string | null; replyPreview?: { id: string; body: string; senderName: string } | null; imageUrl?: string | null; roomId?: string | null; roomSlug?: string | null } }
 type Ping = { type: 'ping' }

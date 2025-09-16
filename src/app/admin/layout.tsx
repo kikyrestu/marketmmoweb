@@ -15,8 +15,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     <div className="min-h-screen flex bg-background">
       <aside className="w-60 border-r bg-sidebar/80 backdrop-blur supports-[backdrop-filter]:bg-sidebar/60 flex flex-col">
         <div className="px-3 py-3 border-b">
-          <h1 className="text-base font-semibold tracking-tight">Admin Panel</h1>
-          <p className="text-[10px] text-muted-foreground">Manage marketplace</p>
+          <h1 className="text-base font-semibold tracking-tight">Panel Admin</h1>
+          <p className="text-[10px] text-muted-foreground">Kelola marketplace</p>
         </div>
         <div className="flex-1 overflow-y-auto">
           <AdminNav />

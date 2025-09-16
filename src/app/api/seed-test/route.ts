@@ -26,6 +26,25 @@ const dummyItems = [
   }
 ]
 
+const dummyBlogPosts = [
+  {
+    title: "Welcome to the New Marketplace!",
+    slug: "welcome-to-the-new-marketplace",
+    excerpt: "Everything you need to know to get started with buying and selling.",
+    content: "This is a full blog post about the marketplace. Here we can detail features, rules, and give tips to our users.",
+    coverImageUrl: "/items/placeholder.svg",
+    tags: ["announcement", "guide"],
+  },
+  {
+    title: "Top 5 Rarest Items This Week",
+    slug: "top-5-rarest-items-this-week",
+    excerpt: "Check out the most sought-after items that landed on our marketplace recently.",
+    content: "Full content detailing the 5 rare items, their history, and why they are so valuable. Lorem ipsum dolor sit amet.",
+    coverImageUrl: "/items/placeholder.svg",
+    tags: ["featured", "items"],
+  }
+]
+
 export async function GET() {
   try {
     await prisma.$connect()
@@ -63,17 +82,34 @@ export async function GET() {
     // Create dummy items
     const createdItems = await Promise.all(
       dummyItems.map(async (item) => {
+        const { categoryName, ...itemData } = item
         const category = await prisma.category.findUnique({
-          where: { name: item.categoryName }
+          where: { name: categoryName }
         })
 
-        if (!category) throw new Error(`Category ${item.categoryName} not found`)
+        if (!category) throw new Error(`Category ${categoryName} not found`)
 
         return prisma.item.create({
           data: {
-            ...item,
+            ...itemData,
             sellerId: seller.id,
             categoryId: category.id
+          }
+        })
+      })
+    )
+
+    // Create dummy blog posts
+    await Promise.all(
+      dummyBlogPosts.map(post => {
+        return prisma.blogPost.upsert({
+          where: { slug: post.slug },
+          update: {},
+          create: {
+            ...post,
+            authorId: seller.id,
+            status: "PUBLISHED",
+            publishedAt: new Date(),
           }
         })
       })

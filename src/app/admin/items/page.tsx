@@ -1,8 +1,28 @@
-export default function AdminItemsPage() {
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { isAdmin } from '@/lib/rbac';
+import { redirect } from 'next/navigation';
+import ItemModerationTable from './ItemModerationTable';
+
+export const dynamic = 'force-dynamic';
+
+async function getItems() {
+  return await prisma.item.findMany({
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, name: true, price: true, createdAt: true, sellerId: true, isAvailable: true }
+  });
+}
+
+export default async function AdminItemsPage() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) redirect('/auth/signin?callbackUrl=/admin/items');
+  const me = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true, role: true } });
+  const allowed = await isAdmin(me?.role);
+  if (!allowed) redirect('/auth/admin');
+
+  const items = await getItems();
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-xl font-semibold">Items (Coming Soon)</h1>
-      <p className="text-sm text-muted-foreground">Nanti di sini ada manajemen item: approve, moderasi, dsb.</p>
-    </div>
-  )
+    <ItemModerationTable items={items} />
+  );
 }

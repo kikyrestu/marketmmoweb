@@ -30,7 +30,7 @@ export default async function BlogDetailPage(props: any) {
           ))}
         </div>
       ) : null}
-      <div className="mt-6 whitespace-pre-wrap leading-relaxed">{post.content}</div>
+      <div className="mt-6" dangerouslySetInnerHTML={{ __html: post.content }} />
     </article>
   )
 }

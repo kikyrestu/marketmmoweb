@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isAdmin } from '@/lib/rbac'
 import { redirect } from 'next/navigation'
+import AssignRoleForm from './AssignRoleForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,29 +26,22 @@ export default async function RolesAdminPage() {
   const { users, assignments } = await getData()
   return (
     <div className="container mx-auto py-8">
-      <h1 className="text-2xl font-bold mb-6">Role Assignments</h1>
+      <h1 className="text-2xl font-bold mb-6">Penugasan Peran</h1>
 
       <div className="border rounded p-4 mb-8">
-        <h2 className="font-semibold mb-2">Assign Escrow Admin</h2>
-        <form className="flex gap-2" action="/api/admin/roles/assign" method="post" onSubmit={(e)=>{e.preventDefault(); const f=e.currentTarget as HTMLFormElement; const data=new FormData(f); fetch('/api/admin/roles/assign',{method:'POST',body:data}).then(async r=>{ if(r.ok) location.reload() })}}>
-          <select name="userId" className="border rounded px-2 py-1">
-            {users.map(u=> <option key={u.id} value={u.id}>{u.name || u.email} ({u.role})</option>)}
-          </select>
-          <input type="hidden" name="role" value="ADMIN" />
-          <input type="hidden" name="scope" value="ESCROW" />
-          <button type="submit" className="px-3 py-1 rounded bg-primary text-primary-foreground">Assign</button>
-        </form>
+        <h2 className="font-semibold mb-2">Tetapkan Admin Escrow</h2>
+        <AssignRoleForm users={users} />
       </div>
 
       <div className="border rounded p-4">
-        <h2 className="font-semibold mb-2">Current Assignments</h2>
+        <h2 className="font-semibold mb-2">Penugasan Saat Ini</h2>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left border-b">
-              <th className="py-2">User</th>
-              <th className="py-2">Role</th>
-              <th className="py-2">Scope</th>
-              <th className="py-2 w-32">Action</th>
+              <th className="py-2">Pengguna</th>
+              <th className="py-2">Peran</th>
+              <th className="py-2">Cakupan</th>
+              <th className="py-2 w-32">Tindakan</th>
             </tr>
           </thead>
           <tbody>

@@ -5,9 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { chatHub } from '@/lib/chatHub'
 
 // params.conversationId read marker
-export async function POST(req: Request, context: any) {
+export async function POST(req: Request, { params }: { params: Promise<{ conversationId: string }> }) {
   try {
-  const params = context?.params as { conversationId: string }
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
     const user = await prisma.user.findUnique({ where: { email: session.user.email } })
@@ -15,8 +14,10 @@ export async function POST(req: Request, context: any) {
 
     const { lastMessageId } = await req.json()
 
+    const { conversationId } = await params
+
     const participant = await (prisma as any).conversationParticipant.findFirst({
-      where: { conversationId: params.conversationId, userId: user.id }
+      where: { conversationId: conversationId, userId: user.id }
     })
     if (!participant) return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
 
@@ -27,7 +28,7 @@ export async function POST(req: Request, context: any) {
 
     chatHub.broadcastToUsers([user.id], () => ({
       type: 'read.update',
-      conversationId: params.conversationId,
+      conversationId: conversationId,
       unreadCount: 0
     }))
 

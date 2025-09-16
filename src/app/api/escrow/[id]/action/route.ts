@@ -36,9 +36,9 @@ export async function POST(req: NextRequest, ctx: any) {
   if (newStatus === 'RESOLVED') {
     try {
       const fresh = await (prisma as any).escrowCase.findUnique({ where: { id: escrow.id } })
-      if (fresh?.buyerId && typeof fresh.totalAmount === 'number') {
+      if (fresh && (fresh.buyerId || fresh.buyer?.id) && typeof fresh.totalAmount === 'number') {
         const points = Math.max(0, Math.floor(fresh.totalAmount / 1000)) // 1 point per 1k amount
-        await awardLoyalty({ userId: fresh.buyerId, points, reason: 'ESCROW_RESOLVED', refType: 'EscrowCase', refId: fresh.id })
+        await awardLoyalty({ userId: fresh.buyerId || fresh.buyer?.id, points, reason: 'ESCROW_RESOLVED', refType: 'EscrowCase', refId: fresh.id })
       }
     } catch (e) {
       console.error('[LOYALTY_ESCROW_RESOLVED]', e)

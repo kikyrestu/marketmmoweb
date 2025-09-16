@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { toast } from "sonner"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -102,14 +103,19 @@ export function SellerVerificationForm() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to submit verification")
+        let msg = "Gagal submit verifikasi"
+        try { msg = await response.text() } catch {}
+        toast.error(msg)
+        setError(msg)
+        return
       }
 
-      // Redirect to verification status page
+      toast.success("Verifikasi berhasil dikirim!")
       window.location.href = "/dashboard/verification-status"
     } catch (err) {
       console.error(err)
-      setError("Failed to submit verification. Please try again.")
+      toast.error("Gagal submit verifikasi. Silakan coba lagi.")
+      setError("Gagal submit verifikasi. Silakan coba lagi.")
     } finally {
       setIsSubmitting(false)
     }
@@ -133,6 +139,11 @@ export function SellerVerificationForm() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          {isSubmitting && (
+            <div className="space-y-4 mb-6">
+              {[...Array(4)].map((_,i)=>(<div key={i} className="h-8 bg-muted/50 rounded animate-pulse" />))}
+            </div>
+          )}
           <div className="space-y-6">
             <h2 className="text-xl font-semibold">Personal Information</h2>
             
@@ -143,7 +154,7 @@ export function SellerVerificationForm() {
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your legal full name" {...field} />
+                    <Input placeholder="Your legal full name" {...field} aria-label="Nama lengkap" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -199,7 +210,7 @@ export function SellerVerificationForm() {
                 <FormItem>
                   <FormLabel>Address</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your complete address" {...field} />
+                    <Input placeholder="Your complete address" {...field} aria-label="Alamat" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -213,7 +224,7 @@ export function SellerVerificationForm() {
                 <FormItem>
                   <FormLabel>Phone Number</FormLabel>
                   <FormControl>
-                    <Input placeholder="+62..." {...field} />
+                    <Input placeholder="+62..." {...field} aria-label="Nomor HP" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -231,7 +242,7 @@ export function SellerVerificationForm() {
                 <FormItem>
                   <FormLabel>Bank Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your bank name" {...field} />
+                    <Input placeholder="Your bank name" {...field} aria-label="Nama bank" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -245,7 +256,7 @@ export function SellerVerificationForm() {
                 <FormItem>
                   <FormLabel>Account Number</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your bank account number" {...field} />
+                    <Input placeholder="Your bank account number" {...field} aria-label="Nomor rekening" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -259,7 +270,7 @@ export function SellerVerificationForm() {
                 <FormItem>
                   <FormLabel>Account Holder Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Name as shown on bank account" {...field} />
+                    <Input placeholder="Name as shown on bank account" {...field} aria-label="Nama pemilik rekening" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -280,6 +291,7 @@ export function SellerVerificationForm() {
                     <Input
                       type="file"
                       accept="image/*"
+                      aria-label="Upload foto KTP"
                       onChange={(e) => onChange(e.target.files)}
                       {...field}
                     />
@@ -302,6 +314,7 @@ export function SellerVerificationForm() {
                     <Input
                       type="file"
                       accept="image/*"
+                      aria-label="Upload selfie verifikasi"
                       onChange={(e) => onChange(e.target.files)}
                       {...field}
                     />
@@ -324,6 +337,7 @@ export function SellerVerificationForm() {
                     <Input
                       type="file"
                       accept="image/*"
+                      aria-label="Upload bukti rekening bank"
                       onChange={(e) => onChange(e.target.files)}
                       {...field}
                     />
@@ -337,7 +351,7 @@ export function SellerVerificationForm() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
+          <Button type="submit" className="w-full" aria-label="Submit verifikasi" disabled={isSubmitting}>
             {isSubmitting ? "Submitting..." : "Submit Verification"}
           </Button>
         </form>

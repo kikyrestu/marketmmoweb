@@ -8,6 +8,14 @@ enum EscrowStatus {
   RESOLVED
 }
 
+enum EscrowRequestStatus {
+  PENDING_BUYER_REQUEST
+  PENDING_SELLER_CONFIRMATION
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
 model EscrowCase {
   id            String         @id @default(cuid())
   conversationId String
@@ -21,6 +29,9 @@ model EscrowCase {
   adminId       String?
   admin         User?          @relation("EscrowAdmin", fields: [adminId], references: [id])
   status        EscrowStatus   @default(INIT)
+  requestStatus EscrowRequestStatus?
+  requestedById String?
+  requestedBy   User?          @relation("EscrowRequester", fields: [requestedById], references: [id])
   fee           Int            @default(0)
   totalAmount   Int            @default(0)
   participants  EscrowParticipant[]
@@ -156,6 +167,7 @@ model User {
   escrowCasesAsBuyer  EscrowCase[] @relation("EscrowBuyer")
   escrowCasesAsSeller EscrowCase[] @relation("EscrowSeller")
   escrowCasesAsAdmin  EscrowCase[] @relation("EscrowAdmin")
+  escrowCasesAsRequester EscrowCase[] @relation("EscrowRequester")
   escrowAuditLogs     EscrowAuditLog[]
   escrowParticipants  EscrowParticipant[]
   offersBought  Offer[] @relation("OfferBuyer")
@@ -170,6 +182,13 @@ model User {
   roleAssignments UserRoleAssignment[]
   // Listings in tradable rooms
   roomListings RoomListing[]
+
+  // Friendships
+  friendshipsRequested Friendship[] @relation("FriendRequester")
+  friendshipsReceived  Friendship[] @relation("FriendAddressee")
+
+  // Notifications
+  notifications Notification[]
 }
 
 model Item {
@@ -185,6 +204,8 @@ model Item {
   seller     User     @relation("SellerItems", fields: [sellerId], references: [id])
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
+  productCategoryId String?
+  productCategory   ProductCategory? @relation(fields: [productCategoryId], references: [id])
 
   // Transactions and Reviews
   transactions Transaction[]
@@ -202,6 +223,7 @@ model Item {
   updatedAt    DateTime       @updatedAt
   Conversation Conversation[]
   fieldValues ItemFieldValue[]
+  dynamicFieldValues ProductFieldValue[] @relation("DynamicFieldItem")
 
   @@index([sellerId])
   @@index([categoryId])
@@ -346,6 +368,7 @@ model ChatMessage {
   senderId       String
   sender         User         @relation(fields: [senderId], references: [id])
   body           String
+  imageUrl       String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -366,6 +389,9 @@ model CommunityMessage {
   // New: optional room context (null = global room)
   roomId    String?
   room      CommunityRoom? @relation(fields: [roomId], references: [id])
+  type      String?
+  itemId    String?
+  itemData  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -588,3 +614,102 @@ model LoyaltySummary {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
+
+// Dynamic Product Fields
+model ProductCategory {
+  id           String   @id @default(uuid())
+  name         String
+  fields       ProductField[]
+  items        Item[]
+}
+
+model ProductField {
+  id           String   @id @default(uuid())
+  category     ProductCategory @relation(fields: [categoryId], references: [id])
+  categoryId   String
+  label        String
+  type         String // text, number, select, etc
+  options      String? // untuk select, comma separated
+  required     Boolean @default(false)
+  order        Int     @default(0)
+  values       ProductFieldValue[]
+}
+
+model ProductFieldValue {
+  id           String   @id @default(uuid())
+  item         Item     @relation(fields: [itemId], references: [id], name: "DynamicFieldItem")
+  itemId       String
+  field        ProductField @relation(fields: [fieldId], references: [id])
+  fieldId      String
+  value        String
+}
+
+model Streamer {
+  id        String   @id @default(cuid())
+  name      String
+  platform  String
+  url       String
+  status    String   @default("ACTIVE")
+  bio       String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Friendship system
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  BLOCKED
+}
+
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  requester   User             @relation("FriendRequester", fields: [requesterId], references: [id])
+  addresseeId String
+  addressee   User             @relation("FriendAddressee", fields: [addresseeId], references: [id])
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([requesterId, addresseeId])
+  @@index([requesterId])
+  @@index([addresseeId])
+  @@index([status])
+}
+
+enum NotificationType {
+  BLOG_POST
+  INFO_UPDATE
+  CHAT_MESSAGE
+  TRANSACTION_UPDATE
+  FRIEND_REQUEST
+  SYSTEM_ALERT
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?              // Additional data like itemId, conversationId, etc.
+  status    NotificationStatus @default(UNREAD)
+  createdAt DateTime           @default(now())
+  readAt    DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+

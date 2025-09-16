@@ -1,0 +1,39 @@
+// Prisma schema for dynamic product fields
+// Tambahkan ke schema.prisma
+
+model ProductCategory {
+  id           String   @id @default(uuid())
+  name         String
+  fields       ProductField[]
+  items        Item[]
+}
+
+model ProductField {
+  id           String   @id @default(uuid())
+  category     ProductCategory @relation(fields: [categoryId], references: [id])
+  categoryId   String
+  label        String
+  type         String // text, number, select, etc
+  options      String? // untuk select, comma separated
+  required     Boolean @default(false)
+  order        Int     @default(0)
+  values       ProductFieldValue[]
+}
+
+model ProductFieldValue {
+  id           String   @id @default(uuid())
+  item         Item     @relation(fields: [itemId], references: [id])
+  itemId       String
+  field        ProductField @relation(fields: [fieldId], references: [id])
+  fieldId      String
+  value        String
+}
+
+model Item {
+  id           String   @id @default(uuid())
+  name         String
+  // ...existing fields...
+  category     ProductCategory? @relation(fields: [categoryId], references: [id])
+  categoryId   String?
+  fieldValues  ProductFieldValue[]
+}

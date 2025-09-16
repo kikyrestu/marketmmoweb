@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { UserCircle } from "lucide-react"
+import { NotificationBell } from "@/components/notification-bell"
+import { MessageDropdown } from "@/components/message-dropdown"
 
 export function Navbar() {
   const { data: session } = useSession()
@@ -54,6 +56,9 @@ export function Navbar() {
                 </>
               )}
 
+              <NotificationBell />
+              <MessageDropdown />
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon">
@@ -69,6 +74,11 @@ export function Navbar() {
                   <Link href="/transactions">
                     <DropdownMenuItem>
                       Transactions
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href="/notifications">
+                    <DropdownMenuItem>
+                      Notification Demo
                     </DropdownMenuItem>
                   </Link>
                   <Link href="/profile">

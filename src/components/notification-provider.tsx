@@ -19,6 +19,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         toast(data.message.body)
       }
     })
+    es.addEventListener('notification.new', (e) => {
+      const data = parse(e as MessageEvent)
+      if (data && data.type === 'notification.new') {
+        const notification = data.notification
+        toast(notification.title, {
+          description: notification.message,
+          duration: 5000,
+        })
+      }
+    })
     return () => { es.close() }
   }, [])
   return <>{children}</>

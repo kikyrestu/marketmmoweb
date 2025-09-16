@@ -28,11 +28,11 @@ export default async function AdminStoragePage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Storage</h1>
-          <p className="text-sm text-muted-foreground">Pools and providers</p>
+          <h1 className="text-xl font-semibold">Penyimpanan</h1>
+          <p className="text-sm text-muted-foreground">Pool dan penyedia</p>
         </div>
         <form action="/admin/storage" method="GET">
-          <button className="px-3 py-2 text-sm rounded-md border hover:bg-accent" formAction="/admin/storage">Refresh</button>
+          <button className="px-3 py-2 text-sm rounded-md border hover:bg-accent" formAction="/admin/storage">Perbarui</button>
         </form>
       </div>
   <StorageEditor initial={data.pools} />

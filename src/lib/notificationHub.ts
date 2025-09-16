@@ -1,4 +1,4 @@
-// In-memory SSE notification hub for offers and chat messages.
+// In-memory SSE notification hub for offers, chat messages, and system notifications.
 export type OfferEvent = {
   type: 'offer.new'
   conversationId: string
@@ -11,11 +11,72 @@ export type ChatNotifyEvent = {
   message: { id: string; body: string; senderId: string }
 }
 
-export type NotificationEvent = OfferEvent | ChatNotifyEvent | { type: 'ping' }
+export type NotificationEvent = {
+  type: 'notification.new'
+  notification: {
+    id: string
+    type: string
+    title: string
+    message: string
+    createdAt: string
+  }
+}
+
+export type EscrowEvent = {
+  type: 'escrow.request'
+  conversationId: string
+  escrow: {
+    id: string
+    buyerId: string
+    sellerId: string
+    itemId: string
+    itemName: string
+    amount: number
+    requestedById: string
+  }
+}
+
+export type EscrowResponseEvent = {
+  type: 'escrow.response'
+  conversationId: string
+  escrow: {
+    id: string
+    buyerId: string
+    sellerId: string
+    action: 'accept' | 'reject'
+    respondedById: string
+  }
+}
+
+export type EscrowConfirmEvent = {
+  type: 'escrow.confirm'
+  conversationId: string
+  escrow: {
+    id: string
+    buyerId: string
+    sellerId: string
+    confirmedById: string
+  }
+}
+
+export type EscrowFinalConfirmEvent = {
+  type: 'escrow.final_confirm'
+  conversationId: string
+  escrow: {
+    id: string
+    buyerId: string
+    sellerId: string
+    confirmedById: string
+  }
+}
+
+export type SystemEvent = { type: 'ping' }
+
+export type HubEvent = OfferEvent | ChatNotifyEvent | NotificationEvent | EscrowEvent | EscrowResponseEvent | EscrowConfirmEvent | EscrowFinalConfirmEvent | SystemEvent
 
 type Client = {
   userId: string
-  write: (event: NotificationEvent) => void
+  write: (event: HubEvent) => void
   close: () => void
 }
 
@@ -27,12 +88,12 @@ class NotificationHub {
 
   private ensurePing() {
     if (this.pingInterval) return
-    this.pingInterval = setInterval(() => { this.broadcastAll({ type: 'ping' }) }, 25000)
+    this.pingInterval = setInterval(() => { this.broadcastAll({ type: 'ping' } as SystemEvent) }, 25000)
   }
 
   subscribe(userId: string, controller: ReadableStreamDefaultController) {
     const encoder = new TextEncoder()
-    const write = (event: NotificationEvent) => {
+    const write = (event: HubEvent) => {
       const payload = `event: ${event.type}\n` + `data: ${JSON.stringify(event)}\n\n`
       controller.enqueue(encoder.encode(payload))
     }
@@ -45,11 +106,11 @@ class NotificationHub {
       }
     }
     this.clients.add(client)
-    write({ type: 'ping' })
+    write({ type: 'ping' } as SystemEvent)
     return client
   }
 
-  broadcastToUsers(userIds: string[], eventFactory: (userId: string) => NotificationEvent) {
+  broadcastToUsers(userIds: string[], eventFactory: (userId: string) => HubEvent) {
     for (const c of this.clients) {
       if (userIds.includes(c.userId)) {
         try { c.write(eventFactory(c.userId)) } catch {}
@@ -57,7 +118,7 @@ class NotificationHub {
     }
   }
 
-  broadcastAll(event: NotificationEvent) {
+  broadcastAll(event: HubEvent) {
     for (const c of this.clients) { try { c.write(event) } catch {} }
   }
 }

@@ -78,10 +78,10 @@ export default function FieldManager() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-xl font-semibold">Dynamic Fields</h1>
+      <h1 className="text-xl font-semibold">Kolom Dinamis</h1>
       <form onSubmit={createField} className="grid gap-2 md:grid-cols-6 items-end border p-4 rounded">
         <div className="flex flex-col col-span-2">
-          <label className="text-xs font-medium">Key</label>
+          <label className="text-xs font-medium">Kunci</label>
           <input className="border rounded px-2 py-1 text-sm" value={form.key} onChange={e=>setForm(f=>({...f,key:e.target.value}))} required pattern="[a-z0-9_]+" />
         </div>
         <div className="flex flex-col col-span-2">
@@ -89,15 +89,15 @@ export default function FieldManager() {
           <input className="border rounded px-2 py-1 text-sm" value={form.label} onChange={e=>setForm(f=>({...f,label:e.target.value}))} required />
         </div>
         <div className="flex flex-col">
-          <label className="text-xs font-medium">Type</label>
+          <label className="text-xs font-medium">Tipe</label>
           <select className="border rounded px-2 py-1 text-sm" value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value, options:''}))}>
-            <option value="TEXT">TEXT</option>
-            <option value="NUMBER">NUMBER</option>
-            <option value="SELECT">SELECT</option>
+            <option value="TEXT">TEKS</option>
+            <option value="NUMBER">ANGKA</option>
+            <option value="SELECT">PILIHAN</option>
           </select>
         </div>
         <div className="flex flex-col">
-          <label className="text-xs font-medium">Order</label>
+          <label className="text-xs font-medium">Urutan</label>
           <input type="number" className="border rounded px-2 py-1 text-sm" value={form.order} onChange={e=>setForm(f=>({...f,order:e.target.value as any}))} />
         </div>
         {form.type === 'SELECT' && (

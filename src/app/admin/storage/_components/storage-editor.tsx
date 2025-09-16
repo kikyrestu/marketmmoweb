@@ -39,11 +39,11 @@ export function StorageEditor({ initial }: { initial: Pool[] }) {
               <table className="w-full text-sm">
                 <thead className="text-xs text-muted-foreground">
                   <tr>
-                    <th className="text-left py-1 pr-2">Provider</th>
-                    <th className="text-left py-1 pr-2">Type</th>
+                    <th className="text-left py-1 pr-2">Penyedia</th>
+                    <th className="text-left py-1 pr-2">Tipe</th>
                     <th className="text-left py-1 pr-2">URL</th>
-                    <th className="text-left py-1 pr-2">Health</th>
-                    <th className="text-left py-1 pr-2">Errors</th>
+                    <th className="text-left py-1 pr-2">Kesehatan</th>
+                    <th className="text-left py-1 pr-2">Kesalahan</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -59,7 +59,7 @@ export function StorageEditor({ initial }: { initial: Pool[] }) {
                         />
                       </td>
                       <td className="py-2 pr-2">
-                        <span className={p.healthy ? 'text-green-600' : 'text-red-600'}>{p.healthy ? 'Healthy' : 'Unhealthy'}</span>
+                        <span className={p.healthy ? 'text-green-600' : 'text-red-600'}>{p.healthy ? 'Sehat' : 'Tidak Sehat'}</span>
                       </td>
                       <td className="py-2 pr-2">{p.errors}</td>
                     </tr>
@@ -70,7 +70,7 @@ export function StorageEditor({ initial }: { initial: Pool[] }) {
           </div>
         ))}
       </div>
-      <button className="mt-4 px-3 py-1.5 text-xs rounded-md border hover:bg-accent">Save Changes</button>
+      <button className="mt-4 px-3 py-1.5 text-xs rounded-md border hover:bg-accent">Simpan Perubahan</button>
     </form>
   )
 }
