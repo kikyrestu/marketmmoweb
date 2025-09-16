@@ -39,39 +39,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Cannot chat with yourself" }, { status: 400 })
     }
 
-    // Check if user already has a conversation with this seller for this item
+    // Cari conversation yang mengandung BOTH current user & seller untuk item ini, walau ada participant tambahan (admin / escrow / dsb)
     const existingConversation = await prisma.conversation.findFirst({
       where: {
         itemId: item.id,
-        participants: {
-          some: { userId: user.id }
-        }
+        AND: [
+          { participants: { some: { userId: user.id } } },
+          { participants: { some: { userId: item.sellerId } } }
+        ]
       },
       include: {
         participants: {
-          include: {
-            user: {
-              select: { id: true, name: true }
-            }
-          }
+          include: { user: { select: { id: true, name: true } } }
         }
       }
     })
 
-    // If conversation exists with exactly 2 participants (buyer + seller), show warning
-    // But skip warning if forceNew is true
-    if (!forceNew && existingConversation && existingConversation.participants.length === 2) {
-      const otherParticipant = existingConversation.participants.find(p => p.userId !== user.id)
-      console.log(`[CHAT_START] ⚠️ EXISTING conversation found: ${existingConversation.id}`)
-      console.log(`[CHAT_START] Other participant: ${otherParticipant?.user.name} (${otherParticipant?.userId})`)
+    if (existingConversation) {
+      const sellerParticipant = existingConversation.participants.find(p => p.userId === item.sellerId)
+      console.log(`[CHAT_START] ♻️ Found existing conversation ${existingConversation.id} (participants: ${existingConversation.participants.length})`)
 
-      return NextResponse.json({
-        conversationId: existingConversation.id,
-        warning: true,
-        message: `Kamu sudah memiliki percakapan pembelian dengan ${otherParticipant?.user.name} untuk item ini. Selesaikan transaksi dulu atau buat percakapan baru?`,
-        sellerName: otherParticipant?.user.name,
-        existingConversationId: existingConversation.id
-      })
+      // Jika tidak forceNew, kirim warning supaya user bisa pilih lanjut atau bikin baru
+      if (!forceNew) {
+        return NextResponse.json({
+          conversationId: existingConversation.id,
+            warning: true,
+            message: `Kamu sudah punya percakapan dengan ${sellerParticipant?.user.name || 'penjual'} untuk item ini. Mau lanjut percakapan lama atau bikin yang baru?`,
+            sellerName: sellerParticipant?.user.name || 'Penjual',
+            existingConversationId: existingConversation.id
+        })
+      }
+      // Jika forceNew = true, lanjut buat conversation baru di bawah
     }
 
     console.log(`[CHAT_START] 🆕 ${forceNew ? 'Force creating' : 'No existing conversation found, creating'} new one for item ${itemId}`)
@@ -83,21 +81,16 @@ export async function POST(req: Request) {
       const doubleCheck = await tx.conversation.findFirst({
         where: {
           itemId: item.id,
-          participants: {
-            every: {
-              userId: {
-                in: [user.id, item.sellerId]
-              }
-            }
-          }
+          AND: [
+            { participants: { some: { userId: user.id } } },
+            { participants: { some: { userId: item.sellerId } } }
+          ]
         },
-        include: {
-          participants: true
-        }
+        include: { participants: true }
       })
 
-      if (doubleCheck && doubleCheck.participants.length === 2) {
-        console.log(`[CHAT_START] Conversation ${doubleCheck.id} was created concurrently, reusing it`)
+      if (doubleCheck) {
+        console.log(`[CHAT_START] ⚠️ Detected race: existing conversation ${doubleCheck.id} appeared, reusing`)
         return doubleCheck
       }
 
