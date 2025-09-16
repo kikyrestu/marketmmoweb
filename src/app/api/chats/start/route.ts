@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     }
 
     // Cari conversation yang mengandung BOTH current user & seller untuk item ini, walau ada participant tambahan (admin / escrow / dsb)
-    const existingConversation = await prisma.conversation.findFirst({
+  let existingConversation = await prisma.conversation.findFirst({
       where: {
         itemId: item.id,
         AND: [
@@ -55,21 +55,36 @@ export async function POST(req: Request) {
       }
     })
 
+    if (!existingConversation) {
+      // Fallback manual scan (jaga-jaga query di atas gagal match karena kondisi relasi Prisma)
+      const allForItem = await prisma.conversation.findMany({
+        where: { itemId: item.id },
+        include: { participants: { include: { user: { select: { id: true, name: true } } } } }
+      })
+      const manual = allForItem.find(c => {
+        const ids = c.participants.map(p => p.userId)
+        return ids.includes(user.id) && ids.includes(item.sellerId)
+      })
+      if (manual) {
+        console.log(`[CHAT_START] 🔄 Fallback found existing conversation via manual scan: ${manual.id}`)
+        // Promote to existingConversation logic below
+  existingConversation = manual
+      }
+    }
+
     if (existingConversation) {
       const sellerParticipant = existingConversation.participants.find(p => p.userId === item.sellerId)
-      console.log(`[CHAT_START] ♻️ Found existing conversation ${existingConversation.id} (participants: ${existingConversation.participants.length})`)
+      console.log(`[CHAT_START] ♻️ Reusing existing conversation ${existingConversation.id} (participants: ${existingConversation.participants.length})`)
 
-      // Jika tidak forceNew, kirim warning supaya user bisa pilih lanjut atau bikin baru
       if (!forceNew) {
         return NextResponse.json({
           conversationId: existingConversation.id,
-            warning: true,
-            message: `Kamu sudah punya percakapan dengan ${sellerParticipant?.user.name || 'penjual'} untuk item ini. Mau lanjut percakapan lama atau bikin yang baru?`,
-            sellerName: sellerParticipant?.user.name || 'Penjual',
-            existingConversationId: existingConversation.id
+          warning: false, // langsung reuse tanpa modal biar ga bikin duplikat lagi
+          reused: true,
+          message: `Percakapan lama digunakan dengan ${sellerParticipant?.user.name || 'penjual'}`
         })
       }
-      // Jika forceNew = true, lanjut buat conversation baru di bawah
+      // forceNew akan lanjut bikin conversation baru di bawah
     }
 
     console.log(`[CHAT_START] 🆕 ${forceNew ? 'Force creating' : 'No existing conversation found, creating'} new one for item ${itemId}`)
