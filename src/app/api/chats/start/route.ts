@@ -39,13 +39,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Cannot chat with yourself" }, { status: 400 })
     }
 
+    const buyerId = user.id
+    const sellerId = item.sellerId
+    const signature = `${item.id}:${buyerId}:${sellerId}`
+
+    // 0) Fast-path: if ConversationKey exists, reuse immediately
+    try {
+      const key = await prisma.conversationKey.findUnique({
+        where: { signature },
+        include: { conversation: { include: { participants: { include: { user: { select: { id: true, name: true } } } } } } }
+      })
+      if (key?.conversation) {
+        console.log(`[CHAT_START] 🔑 Found ConversationKey, reusing conversation ${key.conversationId}`)
+        return NextResponse.json({
+          conversationId: key.conversationId,
+          warning: false,
+          reused: true,
+          message: `Percakapan lama digunakan dengan ${key.conversation.participants.find((p: any)=>p.userId===sellerId)?.user.name || 'penjual'}`
+        })
+      }
+    } catch {}
+
     // Cari conversation yang mengandung BOTH current user & seller untuk item ini, walau ada participant tambahan (admin / escrow / dsb)
-  let existingConversation = await prisma.conversation.findFirst({
+    let existingConversation = await prisma.conversation.findFirst({
       where: {
         itemId: item.id,
         AND: [
-          { participants: { some: { userId: user.id } } },
-          { participants: { some: { userId: item.sellerId } } }
+          { participants: { some: { userId: buyerId } } },
+          { participants: { some: { userId: sellerId } } }
         ]
       },
       include: {
@@ -63,7 +84,7 @@ export async function POST(req: Request) {
       })
       const manual = allForItem.find(c => {
         const ids = c.participants.map(p => p.userId)
-        return ids.includes(user.id) && ids.includes(item.sellerId)
+        return ids.includes(buyerId) && ids.includes(sellerId)
       })
       if (manual) {
         console.log(`[CHAT_START] 🔄 Fallback found existing conversation via manual scan: ${manual.id}`)
@@ -73,8 +94,17 @@ export async function POST(req: Request) {
     }
 
     if (existingConversation) {
-      const sellerParticipant = existingConversation.participants.find(p => p.userId === item.sellerId)
+      const sellerParticipant = existingConversation.participants.find(p => p.userId === sellerId)
       console.log(`[CHAT_START] ♻️ Reusing existing conversation ${existingConversation.id} (participants: ${existingConversation.participants.length})`)
+
+      // Ensure ConversationKey exists for fast future lookups
+      try {
+        await prisma.conversationKey.upsert({
+          where: { signature },
+          update: {},
+          create: { conversationId: existingConversation.id, itemId: item.id, buyerId, sellerId, signature }
+        })
+      } catch {}
 
       if (!forceNew) {
         return NextResponse.json({
@@ -90,23 +120,13 @@ export async function POST(req: Request) {
     console.log(`[CHAT_START] 🆕 ${forceNew ? 'Force creating' : 'No existing conversation found, creating'} new one for item ${itemId}`)
     console.log(`[CHAT_START] Between: ${user.name} (${user.id}) and seller (${item.sellerId})`)
 
-    // Create new conversation using transaction to prevent race conditions
+    // Create new conversation wrapped with unique key creation to avoid duplicates under race
     const result = await prisma.$transaction(async (tx) => {
-      // Double-check if conversation was created while we were checking
-      const doubleCheck = await tx.conversation.findFirst({
-        where: {
-          itemId: item.id,
-          AND: [
-            { participants: { some: { userId: user.id } } },
-            { participants: { some: { userId: item.sellerId } } }
-          ]
-        },
-        include: { participants: true }
-      })
-
-      if (doubleCheck) {
-        console.log(`[CHAT_START] ⚠️ Detected race: existing conversation ${doubleCheck.id} appeared, reusing`)
-        return doubleCheck
+      // Re-check by key inside transaction
+      const keyExisting = await tx.conversationKey.findUnique({ where: { signature } })
+      if (keyExisting) {
+        console.log(`[CHAT_START] ⚠️ Key exists in tx, reusing ${keyExisting.conversationId}`)
+        return await tx.conversation.findUniqueOrThrow({ where: { id: keyExisting.conversationId } })
       }
 
       // Create new conversation
@@ -115,15 +135,32 @@ export async function POST(req: Request) {
           itemId: item.id,
           participants: {
             create: [
-              { userId: user.id },
-              { userId: item.sellerId }
+              { userId: buyerId },
+              { userId: sellerId }
             ]
           }
         }
       })
-
       console.log(`[CHAT_START] Created new conversation ${newConversation.id}`)
-      return newConversation
+
+      // Try to create key; handle race by deleting new conversation and returning existing
+      try {
+        await tx.conversationKey.create({
+          data: { conversationId: newConversation.id, itemId: item.id, buyerId, sellerId, signature }
+        })
+        return newConversation
+      } catch (err: any) {
+        if (err?.code === 'P2002') {
+          // Unique violation: another tx created the key; cleanup and reuse
+          try { await tx.conversation.delete({ where: { id: newConversation.id } }) } catch {}
+          const key = await tx.conversationKey.findUnique({ where: { signature } })
+          if (key) {
+            console.log(`[CHAT_START] ♻️ Race resolved, reusing conversation ${key.conversationId}`)
+            return await tx.conversation.findUniqueOrThrow({ where: { id: key.conversationId } })
+          }
+        }
+        throw err
+      }
     })
 
     return NextResponse.json({

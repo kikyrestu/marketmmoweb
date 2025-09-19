@@ -342,9 +342,30 @@ model Conversation {
   lastMessageAt DateTime                  @default(now())
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
+  // Key mapping (optional back relation)
+  key           ConversationKey?
 
   @@index([itemId])
   @@index([lastMessageAt])
+}
+
+// Pseudo-unique constraint to prevent duplicate buyer-seller-item conversations.
+// We intentionally do NOT add buyerId/sellerId to Conversation to keep flexibility of participants model.
+model ConversationKey {
+  id             String        @id @default(cuid())
+  conversationId String        @unique
+  conversation   Conversation  @relation(fields: [conversationId], references: [id])
+  itemId         String
+  buyerId        String
+  sellerId       String
+  signature      String        @unique // `${itemId}:${buyerId}:${sellerId}`
+  createdAt      DateTime      @default(now())
+
+  @@unique([itemId, buyerId, sellerId])
+  @@index([itemId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([signature])
 }
 
 model ConversationParticipant {

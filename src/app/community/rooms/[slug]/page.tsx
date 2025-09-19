@@ -102,6 +102,7 @@ export default function CommunityRoomPage() {
     sellerName: string;
     existingConversationId: string;
     itemId: string;
+    redirectQuery?: string;
   } | null>(null);
 
   const handleSellInput = (field: string, value: any) => {
@@ -228,12 +229,14 @@ export default function CommunityRoomPage() {
             message: data.message,
             sellerName: data.sellerName,
             existingConversationId: data.existingConversationId,
-            itemId: itemId
+            itemId: itemId,
+            redirectQuery: redirectUrl && redirectUrl.includes('?') ? redirectUrl.substring(redirectUrl.indexOf('?')) : undefined
           });
           setWarningModalOpen(true);
         } else {
-          // No warning, redirect directly
-          window.location.href = redirectUrl || `/conversations/${data.conversationId}`;
+          // No warning, redirect directly using the real conversationId; preserve query flags if provided
+          const query = redirectUrl && redirectUrl.includes('?') ? redirectUrl.substring(redirectUrl.indexOf('?')) : '';
+          window.location.href = `/conversations/${data.conversationId}${query}`;
         }
       } else {
         console.error('Chat start failed:', res.status);
@@ -248,7 +251,8 @@ export default function CommunityRoomPage() {
   // Function untuk continue existing conversation
   const handleContinueConversation = () => {
     if (warningData) {
-      window.location.href = `/conversations/${warningData.existingConversationId}`;
+      const query = warningData.redirectQuery || '';
+      window.location.href = `/conversations/${warningData.existingConversationId}${query}`;
     }
     setWarningModalOpen(false);
   };
@@ -267,7 +271,8 @@ export default function CommunityRoomPage() {
 
         if (res.ok) {
           const data = await res.json();
-          window.location.href = `/conversations/${data.conversationId}`;
+          const query = warningData.redirectQuery || '';
+          window.location.href = `/conversations/${data.conversationId}${query}`;
         } else {
           import('sonner').then(({ toast }) => toast.error('Gagal membuat percakapan baru'));
         }
